@@ -67,19 +67,20 @@ def acceptIterable(func):
         return rtns
     return decorated
 
-def acceptMultiIterable(stop_type=None, info_inject={}):
+def acceptMultiIterable(stop_type=None, info_inject={}, max_depth=10):
     '''
     @Decorator (returned)
 
     make function to accept 'multi-dimensions' iterable data for its first Parameter.
+    itertion stops when it's not iterable or meet the stop_type or meet max iteration depth.
 
         @Parameter stop_type a class, type, or a @Iterable set of them, or None
-            itertion stops when it's not iterable or meet the stop_type.
-            *important* must be specified, None for no stop-type
 
         @Parameter info_inject @dict mapping from info name to argument name
             available info:
             index: represent the iteration index
+
+        @Parameter max_depth @int max iteration depth
 
         @Return truely @Decorator
 
@@ -146,7 +147,7 @@ def acceptMultiIterable(stop_type=None, info_inject={}):
             index = info.setdefault('index', [])
 
             # stop iteration and call the @origin directly
-            if not isinstance(data, Iterable) or meetStopType(data):
+            if not isinstance(data, Iterable) or meetStopType(data) or len(index) >= max_depth:
                 finalizeKwargs(kwargs)
                 return func(data, *args, **kwargs)
 
