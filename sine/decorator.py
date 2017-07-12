@@ -163,3 +163,14 @@ def acceptMultiIterable(stop_type=None, info_inject={}, max_depth=10):
 
         return decorated
     return decorator
+
+def singleton(clz):
+    '''
+    singleton pattern
+    '''
+    __instance = [None]
+    def singleton_deliver(*args, **kw):
+        if __instance[0] == None:
+            __instance[0] = clz(*args, **kw)
+        return __instance[0]
+    return singleton_deliver
