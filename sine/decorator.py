@@ -240,3 +240,13 @@ def singleton(C):
 #     c.__new__ = NewDescriptor()
 #     c.__init__ = InitDescriptor()
 #     return c
+
+def synchronized(mutex):
+    def _decorator(func):
+        def _decorated(*args, **kw):
+            mutex.acquire()
+            rtn = func(*args, **kw)
+            mutex.release()
+            return rtn
+        return _decorated
+    return _decorator
