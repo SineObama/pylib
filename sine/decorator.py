@@ -186,17 +186,22 @@ def singleton(C):
     singleton pattern
     '''
     from types import MethodType
-    _instance = [None, False] # contain the instance and whether it is initialized
+    from threading import Lock
+    _instance = [None, False, Lock(), Lock()] # contain the instance and whether it is initialized, and theirs Lock
     _new = C.__new__
     _init = C.__init__
     def _singleton_new(clz, *args, **kw):
+        _instance[2].acquire()
         if not _instance[0]:
             _instance[0] = _new(C, *args, **kw)
+        _instance[2].release()
         return _instance[0]
     def _singleton_init(self, *args, **kw):
+        _instance[3].acquire()
         if not _instance[1]:
             _instance[1] = True
             _init(self, *args, **kw)
+        _instance[3].release()
     C.__new__ = staticmethod(_singleton_new)
     C.__init__ = MethodType(_singleton_init, None, C)
     return C
