@@ -181,9 +181,33 @@ def acceptMultiIterable(stop_type=None, info_inject={}, max_depth=10):
 #                 c.__init__(self, *args, **kw)
 #     return Singleton
 
+def singleton_autodel(C):
+    '''
+    singleton pattern
+
+    do not use the class in the definition body (properties and methods) any more
+    because it is changed to a function to get the instance
+    always use 'self' in the methods
+    I think this is ok because it is all about that instance
+    if you use, there maybe a two-way reference, causing the __del__ will not be called
+    '''
+    from threading import Lock
+    instances = [None, Lock()]
+    def init_or_get_singleton(*args, **kw):
+        instances[1].acquire()
+        if not instances[0]:
+            instances[0] = C(*args, **kw)
+        instances[1].release()
+        return instances[0]
+    return init_or_get_singleton
+
+# 似乎由于循环引用而无法自动调用析构函数
 def singleton(C):
     '''
     singleton pattern
+
+    it seems the gc will not collect this, __del__ will not be called automatically at termination
+    due to a circle reference
     '''
     from types import MethodType
     from threading import Lock
