@@ -1,23 +1,23 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
 
 import sys
 sys.path.append('D:\Users\Git\pylib')
 
 
-# In[2]:
+# In[ ]:
 
 from sine.decorator import singleton, synchronized
 
 
-# In[3]:
+# In[ ]:
 
 import datetime
 
 
-# In[4]:
+# In[ ]:
 
 # format to read and corresponding fields to be replaced
 tformats = [  '%M',
@@ -54,7 +54,7 @@ def tryReplace(now, s, formats, fieldss):
     return now.replace(**d)
 
 
-# In[5]:
+# In[ ]:
 
 class AlarmClock(object):
     def __init__(self, time, msg=''):
@@ -65,7 +65,7 @@ class AlarmClock(object):
         return self.time.strftime('%Y-%m-%d %H:%M:%S') + ' ' + self.msg
 
 
-# In[6]:
+# In[ ]:
 
 @singleton
 class ClockManager(object):
@@ -107,10 +107,16 @@ class ClockManager(object):
     def addCountDown(self, delta, msg=''):
         self.__addNormal(delta + datetime.datetime.now(), msg)
         
-    def __addNormal(self, time, msg=''):
+    def __addNormal(self, time, msg):
         clock = AlarmClock(time, msg)
         self.__clocks.append(clock)
         self.__clocks = sorted(self.__clocks, key=lambda x:x.time)
+    
+    @synchronized(__mutex)
+    def edit(self, index, msg):
+        if index >= len(self.__clocks):
+            return 'out of index'
+        self.__clocks[index].msg = msg
         
     @synchronized(__mutex)
     def remove(self, indexs):
@@ -128,7 +134,7 @@ class ClockManager(object):
                 clock.remindTime = now + self.__remindDelay
 
 
-# In[7]:
+# In[ ]:
 
 @singleton
 class OutputManager(object):
@@ -198,7 +204,7 @@ class OutputManager(object):
         self.__os.system('cls')
 
 
-# In[8]:
+# In[ ]:
 
 # main loop
 manager = ClockManager()
@@ -280,9 +286,20 @@ while (1):
             for s in ss:
                 indexs.append(int(s))
         except:
-            print 'wrong input'
             continue
         manager.remove(indexs)
+        output.clsAndPrintList()
+            
+    if order[0] == 'e': # edit message
+        
+        ss = order.split(' ', 2)
+        if len(ss) < 3:
+            continue
+        try:
+            index = int(ss[1])
+        except:
+            continue
+        manager.edit(index, ss[2])
         output.clsAndPrintList()
         
     wrong_input = False
