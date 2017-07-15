@@ -38,7 +38,7 @@ class PresistentManager(object):
             f = open(path, 'rb')
             rtn = self.__pickle.load(f)
             f.close()
-        except:
+        except IOError:
             rtn = defalut
         return rtn
 
