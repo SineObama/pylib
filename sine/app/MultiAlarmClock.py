@@ -15,6 +15,8 @@ from sine.decorator import singleton, synchronized
 # In[ ]:
 
 import datetime
+def getNow():
+    return datetime.datetime.now()
 
 
 # In[ ]:
@@ -53,85 +55,286 @@ def tryReplace(now, s, formats, fieldss):
         exec('d[field] = target.' + field)
     return now.replace(**d)
 
-
-# In[ ]:
-
-class AlarmClock(object):
-    def __init__(self, time, msg=''):
-        self.time = time
-        self.remindTime = time
-        self.msg = msg
-    def __str__(self):
-        return self.time.strftime('%Y-%m-%d %H:%M:%S') + ' ' + self.msg
+# refactor by parsing step by step, and catching Exception
+# parse return the parsed object and the remain string
+class ParseException(Exception):
+    pass
+def parseString(s):
+    '''length check should be outside for further info'''
+    if len(s) == 0:
+        raise ParseException('no string to parse')
+    s = s.split(' ', 1)
+    return s[0], (s[1] if len(s) > 1 else '')
+def parseTime(s, reference):
+    s = s.split(' ', 1)
+    target = tryReplace(reference, s[0], tformats, tfieldss)
+    if not target:
+        raise ParseException('can not parse as time: ' + s[0])
+    return target, (s[1] if len(s) > 1 else '')
+def parseDateAndTime(s, reference): # (date) time
+    try:
+        target, s = parseTime(s, reference)
+    except ParseException as e:
+        s = s.split(' ', 1)
+        if len(s) < 2:
+            raise ParseException('can not parse as time (no date): ' + s[0])
+        target = tryReplace(reference, s[0], dformats, dfieldss)
+        if not target:
+            raise ParseException('can not parse as date or time: ' + s[0])
+        target, s = parseTime(s[1], target)
+    return target, s
+def parseIndex(s):
+    if len(s) == 0:
+        raise ParseException('no index found')
+    s = s.split(' ', 1)
+    try:
+        index = int(s[0])
+    except ValueError as e:
+        raise ParseException('can not parse as int: ' + s[0])
+    return index, (s[1] if len(s) > 1 else '')
+def parseAllToIndex(s):
+    '''return [] when empty'''
+    if len(s) == 0:
+        return []
+    s = s.split()
+    indexs = []
+    try:
+        for i in s:
+            indexs.append(int(i))
+    except ValueError as e:
+        raise ParseException('can not parse as int: ' + i)
+    return indexs
 
 
 # In[ ]:
 
 @singleton
+class DataManager(object):
+    '''
+    one show acquire() before get() and set(), and then release() after complete r/w
+    '''
+    import threading as __threading
+    __mutex = __threading.Lock()
+    
+    def __init__(self):
+        self.__data = { }
+        return
+    
+    def acquire(self):
+        return self.__mutex.acquire()
+    
+    def set(self, data, key='__root'):
+        self.__data[key] = data
+        return
+    
+    def get(self, key='__root'):
+        if not self.__data.has_key(key):
+            raise KeyError('no key ' + str(key))
+        return self.__data[key]
+    
+    def release(self):
+        return self.__mutex.release()
+    
+
+
+# In[ ]:
+
+# core data model
+class AlarmClock(dict):
+    '''
+    time: event time
+    remindTime: alarm time
+    msg: message
+    repeat:
+        None
+        string: for weekday, e.g. '12345  ', '1 3 567'
+        datetime.timedelta: every the time, e.g. 1 hour
+    on: on or off'''
+    def __init__(self, time, msg='', repeat=None):
+        self['time'] = time
+        self['remindTime'] = time
+        self['msg'] = msg
+        self['repeat'] = repeat
+        self['on'] = True
+        return
+    
+    def __str__(self):
+        return self['time'].strftime('%Y-%m-%d %H:%M:%S') + ' ' + self['msg']
+    
+    def __getitem__(self, key):
+        try:
+            return dict.__getitem__(self, key)
+        except KeyError:
+            return None
+    
+
+
+# In[ ]:
+
+data = DataManager()
+
+
+# ### indexes used for specification are showed from 1, and stored from 0 of course, and 0 maybe used for default
+
+# In[ ]:
+
+class ClockException(Exception):
+    pass
+@singleton
 class ClockManager(object):
-    __filename = 'clocks.bin'
-    from threading import Lock as __Lock
-    __mutex = __Lock()
+    __filename = 'clocks.binv2'
+    
+    def __resetWeekday(self, now, time, repeat):
+        nexttime = now.replace(hour=time.hour, minute=time.minute, second=time.second, microsecond=time.microsecond)
+        while nexttime <= now or str(nexttime.weekday()+1) not in repeat:
+            nexttime += self.__day
+        return nexttime
 
     def __init__(self):
         from sine.helpers import PresistentManager
-        self.__clocks = PresistentManager().getOrDefault(self.__filename, [])
-        self.__remindDelay = datetime.timedelta(0, 300) # 5 minutes
-        self.__presistent = PresistentManager
-
-    @synchronized(__mutex)
-    def stop(self):
-        self.__presistent().set(self.__filename, self.__clocks)
+        self.__presistent = PresistentManager()
+        self.__day = datetime.timedelta(1)
+        clocks = self.__presistent.getOrDefault(self.__filename, [])
+        # 更新星期重复的闹钟
+        now = getNow()
+        for clock in clocks:
+            if clock['time'] <= now and type(clock['repeat']) == str:
+                clock['time'] = self.__resetWeekday(now, clock['time'], clock['repeat'])
+                clock['remindTime'] = clock['time']
+        data.acquire()
+        data.set(clocks)
+        data.release()
+        return
     
-    @synchronized(__mutex)
-    def getAll(self):
-        clocks = []
-        for clock in self.__clocks:
-            clocks.append(clock)
-        return clocks
+    @synchronized(data)
+    def save(self):
+        self.__presistent.set(self.__filename, data.get())
+        return
     
-    @synchronized(__mutex)
-    def getExpireds(self):
+    @synchronized(data)
+    def getExpireds(self): # 供Output提示
         expireds = []
-        now = datetime.datetime.now()
-        for clock in self.__clocks:
-            if clock.remindTime <= now:
+        now = getNow()
+        for clock in data.get():
+            if clock['remindTime'] <= now and clock['on']:
                 expireds.append(clock)
         return expireds
 
-    @synchronized(__mutex)
-    def add(self, time, msg=''):
-        self.__addNormal(time, msg='')
+    def addOnce(self, date_time, msg=''):
+        return self.__add(AlarmClock(date_time, msg))
 
-    @synchronized(__mutex)
-    def addCountDown(self, delta, msg=''):
-        self.__addNormal(delta + datetime.datetime.now(), msg)
-        
-    def __addNormal(self, time, msg):
-        clock = AlarmClock(time, msg)
-        self.__clocks.append(clock)
-        self.__clocks = sorted(self.__clocks, key=lambda x:x.time)
+    def addRepeatWeekday(self, start_time, repeat, msg=''):
+        '''按星期重复，输入开始的时间和重复星期编号字符串，比如星期一和星期二就是'12' '''
+        if repeat == '':
+            raise ClockException('repeat can not be empty')
+        d = {}
+        for i in '1234567':
+            d[i] = False
+        for i in repeat:
+            d[i] = True
+        weekdays = ''
+        for i in '1234567':
+            weekdays += i if d[i] else ' '
+        while str(start_time.weekday()+1) not in weekdays:
+            start_time += self.__day
+        return self.__add(AlarmClock(start_time, msg, weekdays))
+
+    def addRepeatPeriod(self, start_time, delta, msg=''):
+        return self.__add(AlarmClock(start_time, msg, delta))
     
-    @synchronized(__mutex)
+    @synchronized(data)
+    def __add(self, clock):
+        clocks = data.get()
+        clocks.append(clock)
+        clocks.sort(key=lambda x:x['time'])
+        return
+    
+    @synchronized(data)
     def edit(self, index, msg):
-        if index >= len(self.__clocks):
-            return 'out of index'
-        self.__clocks[index].msg = msg
+        '''not accept 0'''
+        clocks = data.get()
+        if index > len(clocks) or index < 1:
+            return 'index out of range'
+        clocks[index - 1]['msg'] = msg
+        return
+    
+    @synchronized(data)
+    def close(self, index):
+        '''对于单次闹钟，会关掉，对于还未到的重复闹钟，就会取消下一个提醒
+        传入0关掉第一个到期闹钟'''
+        clocks = data.get()
+        if index > len(clocks):
+            raise ClockException('out of index: ' + str(index))
         
-    @synchronized(__mutex)
+        # choose clock
+        now = getNow()
+        if index != 0:
+            clock = clocks[index - 1]
+        else: # close first expired
+            found = False
+            for clock in clocks:
+                if clock['time'] <= now and clock['on']:
+                    found = True
+                    break
+            if not found:
+                raise ClockException('no expired clock')
+        
+        # close it
+        if clock['repeat'] == None:
+            clock['on'] = False
+        else:
+            if type(clock['repeat']) == str:
+                nexttime = clock['time']
+                nexttime += self.__day
+                while str(nexttime.weekday()+1) not in clock['repeat']:
+                    nexttime += self.__day
+            else:
+                nexttime = now + clock['repeat']
+            clock['time'] = nexttime
+            clock['remindTime'] = nexttime
+            clocks.sort(key=lambda x:x['time'])
+        return
+    
+    @synchronized(data)
+    def switch(self, indexs):
+        '''0 stands for the first one(1)'''
+        if len(indexs) == 0:
+            indexs = [1]
+        clocks = data.get()
+        now = getNow()
+        for i, clock in enumerate(clocks):
+            if i+1 in indexs:
+                clock['on'] = not clock['on']
+                if clock['repeat']:
+                    if type(clock['repeat']) == str: # always renew 'weekday'
+                        clock['time'] = self.__resetWeekday(now, clock['time'], clock['repeat'])
+                    else:
+                        if clock['on']: # renew 'period' when open
+                            clock['time'] = now + clock['repeat']
+                clock['remindTime'] = clock['time']
+        clocks.sort(key=lambda x:x['time'])
+        return
+    
+    @synchronized(data)
     def remove(self, indexs):
+        '''0 stands for the first one(1)'''
+        if len(indexs) == 0:
+            indexs = [1]
         clocks = []
-        for i, clock in enumerate(self.__clocks):
-            if i not in indexs:
+        for i, clock in enumerate(data.get()):
+            if i+1 not in indexs:
                 clocks.append(clock)
-        self.__clocks = clocks
-
-    @synchronized(__mutex)
-    def pauseAll(self):
-        now = datetime.datetime.now()
-        for clock in self.__clocks:
-            if clock.remindTime <= now:
-                clock.remindTime = now + self.__remindDelay
+        data.set(clocks)
+        return
+    
+    @synchronized(data)
+    def later(self, time):
+        '''remind me at a later @Parameter time'''
+        for clock in data.get():
+            if clock['remindTime'] < time:
+                clock['remindTime'] = time
+        return
+    
 
 
 # In[ ]:
@@ -142,7 +345,9 @@ class OutputManager(object):
     import os as __os
     import time as __time
     import threading as __threading
-    __mutex = __threading.Lock()
+    __helper = datetime.datetime.min.replace(year=1900)
+    __sound = 600
+    __last = 30
 
     def __init__(self, clockManager):
         self.__quit = False
@@ -152,158 +357,147 @@ class OutputManager(object):
         t.setDaemon(True)
         t.start()
         self.__alarmThread = t
-        
+        return
+    
     def stop(self):
-        self.__mutex.acquire()
         self.__quit = True
-        self.__mutex.release()
+        self.__clockManager = None
         self.__alarmThread.join(2)
         if self.__alarmThread.is_alive():
             raise RuntimeError('thread can not exit')
+        return
 
+    @synchronized(data)
     def clsAndPrintList(self):
         self.__cls()
-        clocks = self.__clockManager.getAll()
-        now = datetime.datetime.now()
+        clocks = data.get()
+        now = getNow()
         if len(clocks):
             string = 'alarm clocks:\n'
             for i, clock in enumerate(clocks):
-                string += '%3d'%i + ' '
-                if clock.time <= now:
-                    string += '!!! '
-                string += str(clock) + '\n'
+                string += '%3d %3s %8s %3s %s\n'%(i+1,
+                    ('ON' if clock['on'] else 'OFF'),
+                    ('' if clock['repeat'] == None else (clock['repeat'] if type(clock['repeat']) == str else (self.__helper + clock['repeat']).strftime('%H:%M:%S'))),
+                    ('!!!' if clock['time'] <= now and clock['on'] else ''),
+                    str(clock))
         else:
             string = 'no clock\n'
         sys.stdout.write(string)
-        
+        return
+    
     def __alarm(self):
         count = 0
-        mark = 0
+        alarm = False
         while 1:
             if self.__quit:
                 break
             expireds = self.__clockManager.getExpireds()
-            if not mark and len(expireds):
-                mark = (count + 1) % 5
-            if mark and not len(expireds):
-                mark = 0
-            if mark:
-                if count % 5 == mark - 1:
+            if not alarm and len(expireds):
+                alarm = True
+                count = 0
+            if alarm and not len(expireds):
+                alarm = False
+            if count > 10 * self.__last:
+                alarm = False
+                self.__clockManager.later(getNow() + remindDelay)
+            if alarm:
+                if count % 5 == 0:
                     self.__cls()
-                if count % 5 == mark % 5:
+                if count % 5 == 1:
                     string = ''
                     for clock in expireds:
                         string += str(clock) + '\n'
                     sys.stdout.write(string)
-                if count % 5 == mark % 5 or count % 5 == (mark+2) % 5:
-                    self.__winsound.Beep(600,50)
+                if count % 5 == 1 or count % 5 == 3:
+                    self.__winsound.Beep(self.__sound,50)
             count += 1
             self.__time.sleep(0.1)
+        return
     
     def __cls(self):
         self.__os.system('cls')
+        return
+    
 
 
 # In[ ]:
 
-# main loop
-manager = ClockManager()
-output = OutputManager(manager)
-output.clsAndPrintList()
-wrong_input = False
-while (1):
-    if wrong_input:
-        print 'wrong input'
-    wrong_input = True
-    
-    order = raw_input()
-    
-    if len(order) == 0: # 'pause'  and clean screen
-        manager.pauseAll()
-        output.clsAndPrintList()
-        wrong_input = False
-        continue
-        
-    if order[0] == 'q': # quit
-        break
-        
-    if order[0] == 'c': # add clock
-        
-        # normal clock
-        if order[1] == ' ':
-            ss = order.split(' ', 1)
-            if len(ss) < 2:
-                continue
-            ss = ss[1].split(' ', 1)
+try:
+    # main loop
 
-            now = datetime.datetime.now()
-            target = tryReplace(now, ss[0], tformats, tfieldss)
-            if not target: # try date
-                if len(ss) < 2:
-                    continue
-                target = tryReplace(now, ss[0], dformats, dfieldss)
-                if not target:
-                    continue
-                ss = ss[1].split(' ', 1)
-                target = tryReplace(target, ss[0], tformats, tfieldss)
-                if not target:
-                    continue
-            
-            msg = ''
-            if len(ss) == 2:
-                msg = ss[1]
-            manager.add(target, msg)
+    manager = ClockManager()
+    output = OutputManager(manager)
+    output.clsAndPrintList()
+
+    zero = datetime.datetime.min # 用于计算时长类数据
+    remindDelay = datetime.timedelta(0, 300) # 5 minutes
+
+    while (1):
+        order = raw_input()
+        now = getNow()
+
+        try: # catch parse exception
+            if len(order) == 0: # 'pause'  and clean screen
+                manager.later(now + remindDelay)
+                output.clsAndPrintList()
+                continue
+
+            order, remain = parseString(order)
+
+            if order == 'q': # quit
+                break
+
+            # anormal clock: (date) time (msg)
+            if order == 'c':
+                target, msg = parseDateAndTime(remain, now)
+                manager.addOnce(target, msg)
+            # count down: time (msg)
+            if order == 'cd':
+                target, msg = parseTime(remain, zero)
+                manager.addOnce(target - zero + now, msg)
+            # repeat weekday: (date) time repeat_day_num (msg)
+            if order == 'cv':
+                target, remain = parseDateAndTime(remain, now)
+                repeat, msg = parseString(remain)
+                manager.addRepeatWeekday(target, repeat, msg)
+            # repeat period: (date) time period (msg)
+            if order == 'cf':
+                target, remain = parseDateAndTime(remain, now)
+                period, msg = parseTime(remain, zero)
+                manager.addRepeatPeriod(target, period - zero, msg)
+
+            # edit message
+            if order == 'e':
+                index, msg = parseIndex(remain)
+                manager.edit(index, msg)
+            # close alarm
+            if order == 'a':
+                if len(remain) == 0:
+                    index = 0
+                else:
+                    index, unused = parseIndex(remain)
+                manager.close(index)
+            # switch
+            if order == 's':
+                indexs = parseAllToIndex(remain)
+                manager.switch(indexs)
+            # remove clock
+            if order == 'r':
+                indexs = parseAllToIndex(remain)
+                manager.remove(indexs)
+
             output.clsAndPrintList()
-            wrong_input = False
-            
-        # count down
-        if order[1] == 'd':
-            ss = order.split(' ', 1)
-            if len(ss) < 2:
-                continue
-            ss = ss[1].split(' ', 1)
+            manager.save()
+        except ParseException as e:
+            print e
+        except ClockException as e:
+            print e
 
-            zero = datetime.datetime.min
-            target = tryReplace(zero, ss[0], tformats, tfieldss)
-            if not target:
-                continue
-            
-            msg = ''
-            if len(ss) == 2:
-                msg = ss[1]            
-            manager.addCountDown(target - zero, msg)
-            output.clsAndPrintList()
-            
-    if order[0] == 'r': # remove clock
-        
-        ss = order.split(' ', 1)
-        if len(ss) < 2: # default to remove the first one
-            ss = ['0']
-        else:
-            ss = ss[1].split()
-        indexs = []
-        try:
-            for s in ss:
-                indexs.append(int(s))
-        except:
-            continue
-        manager.remove(indexs)
-        output.clsAndPrintList()
-            
-    if order[0] == 'e': # edit message
-        
-        ss = order.split(' ', 2)
-        if len(ss) < 3:
-            continue
-        try:
-            index = int(ss[1])
-        except:
-            continue
-        manager.edit(index, ss[2])
-        output.clsAndPrintList()
-        
-    wrong_input = False
+finally:
+    output.stop()
 
-manager.stop()
-output.stop()
+
+# In[ ]:
+
+
 
