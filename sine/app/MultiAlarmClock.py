@@ -366,7 +366,7 @@ class OutputManager(object):
         if self.__alarmThread.is_alive():
             raise RuntimeError('thread can not exit')
         return
-
+    
     @synchronized(data)
     def clsAndPrintList(self):
         self.__cls()
@@ -397,7 +397,7 @@ class OutputManager(object):
                 count = 0
             if alarm and not len(expireds):
                 alarm = False
-            if count > 10 * self.__last:
+            if alarm and count > 10 * self.__last:
                 alarm = False
                 self.__clockManager.later(getNow() + remindDelay)
             if alarm:
@@ -427,19 +427,19 @@ try:
 
     manager = ClockManager()
     output = OutputManager(manager)
-    output.clsAndPrintList()
 
     zero = datetime.datetime.min # 用于计算时长类数据
     remindDelay = datetime.timedelta(0, 300) # 5 minutes
 
     while (1):
+        output.clsAndPrintList()
+        manager.save()
         order = raw_input()
         now = getNow()
 
         try: # catch parse exception
             if len(order) == 0: # 'pause'  and clean screen
                 manager.later(now + remindDelay)
-                output.clsAndPrintList()
                 continue
 
             order, remain = parseString(order)
@@ -485,9 +485,7 @@ try:
             if order == 'r':
                 indexs = parseAllToIndex(remain)
                 manager.remove(indexs)
-
-            output.clsAndPrintList()
-            manager.save()
+            
         except ParseException as e:
             print e
         except ClockException as e:
@@ -495,9 +493,4 @@ try:
 
 finally:
     output.stop()
-
-
-# In[ ]:
-
-
 
