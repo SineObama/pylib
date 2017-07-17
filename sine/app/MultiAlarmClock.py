@@ -83,9 +83,15 @@ def parseDateAndTime(s, reference): # (date) time
             raise ParseException('can not parse as date or time: ' + s[0])
         target, s = parseTime(s[1], target)
     return target, s
-def parseIndex(s):
+def parseDateTimeByOrder(order, s, zero, now):
+    if order.endswith('d'):
+        target, remain = parseTime(s, zero)
+        return target - zero + now, remain
+    else:
+        return parseDateAndTime(s, now)
+def parseIndexWithDefaultZero(s):
     if len(s) == 0:
-        raise ParseException('no index found')
+        return 0, ''
     s = s.split(' ', 1)
     try:
         index = int(s[0])
@@ -194,6 +200,7 @@ class ClockManager(object):
         from sine.helpers import PresistentManager
         self.__presistent = PresistentManager()
         self.__day = datetime.timedelta(1)
+        self.__sort = lambda x:x['time']
         clocks = self.__presistent.getOrDefault(self.__filename, [])
         # 更新星期重复的闹钟
         now = getNow()
@@ -201,6 +208,7 @@ class ClockManager(object):
             if clock['time'] <= now and type(clock['repeat']) == str:
                 clock['time'] = self.__resetWeekday(now, clock['time'], clock['repeat'])
                 clock['remindTime'] = clock['time']
+        clocks.sort(key=self.__sort)
         data.acquire()
         data.set(clocks)
         data.release()
@@ -246,16 +254,29 @@ class ClockManager(object):
     def __add(self, clock):
         clocks = data.get()
         clocks.append(clock)
-        clocks.sort(key=lambda x:x['time'])
+        clocks.sort(key=self.__sort)
         return
     
     @synchronized(data)
     def edit(self, index, msg):
-        '''not accept 0'''
+        if index == 0:
+            index = 1
         clocks = data.get()
         if index > len(clocks) or index < 1:
-            return 'index out of range'
+            raise ClockException('index out of range')
         clocks[index - 1]['msg'] = msg
+        return
+    
+    @synchronized(data)
+    def editTime(self, index, date_time):
+        if index == 0:
+            index = 1
+        clocks = data.get()
+        if index > len(clocks) or index < 1:
+            raise ClockException('index out of range')
+        clocks[index - 1]['time'] = date_time
+        clocks[index - 1]['remindTime'] = date_time
+        clocks.sort(key=self.__sort)
         return
     
     @synchronized(data)
@@ -292,7 +313,7 @@ class ClockManager(object):
                 nexttime = now + clock['repeat']
             clock['time'] = nexttime
             clock['remindTime'] = nexttime
-            clocks.sort(key=lambda x:x['time'])
+            clocks.sort(key=self.__sort)
         return
     
     @synchronized(data)
@@ -312,7 +333,7 @@ class ClockManager(object):
                         if clock['on']: # renew 'period' when open
                             clock['time'] = now + clock['repeat']
                 clock['remindTime'] = clock['time']
-        clocks.sort(key=lambda x:x['time'])
+        clocks.sort(key=self.__sort)
         return
     
     @synchronized(data)
@@ -431,9 +452,13 @@ try:
     zero = datetime.datetime.min # 用于计算时长类数据
     remindDelay = datetime.timedelta(0, 300) # 5 minutes
 
+    output.clsAndPrintList()
+    renew = False
     while (1):
-        output.clsAndPrintList()
-        manager.save()
+        if renew:
+            output.clsAndPrintList()
+            manager.save()
+        renew = True
         order = raw_input()
         now = getNow()
 
@@ -448,47 +473,58 @@ try:
                 break
 
             # anormal clock: (date) time (msg)
-            if order == 'c':
-                target, msg = parseDateAndTime(remain, now)
-                manager.addOnce(target, msg)
-            # count down: time (msg)
-            if order == 'cd':
-                target, msg = parseTime(remain, zero)
-                manager.addOnce(target - zero + now, msg)
+            if order.startswith('cc'):
+                target, remain = parseDateTimeByOrder(order, remain, zero, now)
+                manager.addOnce(target, remain)
+                continue
             # repeat weekday: (date) time repeat_day_num (msg)
-            if order == 'cv':
-                target, remain = parseDateAndTime(remain, now)
-                repeat, msg = parseString(remain)
-                manager.addRepeatWeekday(target, repeat, msg)
+            if order.startswith('cv'):
+                target, remain = parseDateTimeByOrder(order, remain, zero, now)
+                weekdays, msg = parseString(remain)
+                manager.addRepeatWeekday(target, weekdays, msg)
+                continue
             # repeat period: (date) time period (msg)
-            if order == 'cf':
-                target, remain = parseDateAndTime(remain, now)
+            if order.startswith('cf'):
+                target, remain = parseDateTimeByOrder(order, remain, zero, now)
                 period, msg = parseTime(remain, zero)
                 manager.addRepeatPeriod(target, period - zero, msg)
+                continue
 
             # edit message
             if order == 'e':
-                index, msg = parseIndex(remain)
+                index, msg = parseIndexWithDefaultZero(remain)
                 manager.edit(index, msg)
+                continue
+            # edit time
+            if order.startswith('et'):
+                index, remain = parseIndexWithDefaultZero(remain)
+                target, remain = parseDateTimeByOrder(order, remain, zero, now)
+                manager.editTime(index, target)
+                continue
             # close alarm
             if order == 'a':
-                if len(remain) == 0:
-                    index = 0
-                else:
-                    index, unused = parseIndex(remain)
+                index, unused = parseIndexWithDefaultZero(remain)
                 manager.close(index)
+                continue
             # switch
             if order == 's':
                 indexs = parseAllToIndex(remain)
                 manager.switch(indexs)
+                continue
             # remove clock
             if order == 'r':
                 indexs = parseAllToIndex(remain)
                 manager.remove(indexs)
+                continue
+            
+            renew = False
+            print 'wrong order'
             
         except ParseException as e:
+            renew = False
             print e
         except ClockException as e:
+            renew = False
             print e
 
 finally:
