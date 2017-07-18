@@ -148,14 +148,14 @@ class DataManager(object):
 # core data model
 class AlarmClock(dict):
     '''
-    time: event time
-    remindTime: alarm time
-    msg: message
-    repeat:
-        None
-        string: for weekday, e.g. '12345  ', '1 3 567'
-        datetime.timedelta: every the time, e.g. 1 hour
-    on: on or off'''
+    time: 闹钟时间
+    remindTime: 提醒时间（响铃时间）
+    msg: 信息
+    repeat: 重复方式
+        None: 无
+        string: 星期重复, 格式如：'12345  ', '1 3 567'
+        datetime.timedelta: 周期重复, 比如1小时（冷却时间）
+    on: 开关'''
     def __init__(self, time, msg='', repeat=None):
         self['time'] = time
         self['remindTime'] = time
@@ -202,10 +202,10 @@ class ClockManager(object):
         self.__day = datetime.timedelta(1)
         self.__sort = lambda x:x['time']
         clocks = self.__presistent.getOrDefault(self.__filename, [])
-        # 更新星期重复的闹钟
+        # 只更新过期的星期重复闹钟
         now = getNow()
         for clock in clocks:
-            if clock['time'] <= now and type(clock['repeat']) == str:
+            if clock['time'] < now and type(clock['repeat']) == str:
                 clock['time'] = self.__resetWeekday(now, clock['time'], clock['repeat'])
                 clock['remindTime'] = clock['time']
         clocks.sort(key=self.__sort)
@@ -224,7 +224,7 @@ class ClockManager(object):
         expireds = []
         now = getNow()
         for clock in data.get():
-            if clock['remindTime'] <= now and clock['on']:
+            if clock['on'] and clock['remindTime'] <= now:
                 expireds.append(clock)
         return expireds
 
@@ -257,51 +257,61 @@ class ClockManager(object):
         clocks.sort(key=self.__sort)
         return
     
+    def __checkIndex(f):
+        def _f(self, index, *args, **kw):
+            clocks = data.get()
+            if index > len(clocks) or index < 0:
+                raise ClockException('index out of range: ' + str(index))
+            kw['clocks'] = clocks
+            f(self, index, *args, **kw)
+            return
+        return _f
+    
     @synchronized(data)
-    def edit(self, index, msg):
+    @__checkIndex
+    def edit(self, index, msg, **kw):
         if index == 0:
             index = 1
-        clocks = data.get()
-        if index > len(clocks) or index < 1:
-            raise ClockException('index out of range')
-        clocks[index - 1]['msg'] = msg
+        kw['clocks'][index - 1]['msg'] = msg
         return
     
     @synchronized(data)
-    def editTime(self, index, date_time):
+    @__checkIndex
+    def editTime(self, index, date_time, **kw): # and turn on
         if index == 0:
             index = 1
-        clocks = data.get()
-        if index > len(clocks) or index < 1:
-            raise ClockException('index out of range')
+        clocks = kw['clocks']
         clocks[index - 1]['time'] = date_time
         clocks[index - 1]['remindTime'] = date_time
+        clocks[index - 1]['on'] = True
         clocks.sort(key=self.__sort)
         return
     
     @synchronized(data)
-    def close(self, index):
-        '''对于单次闹钟，会关掉，对于还未到的重复闹钟，就会取消下一个提醒
-        传入0关掉第一个到期闹钟'''
-        clocks = data.get()
-        if index > len(clocks):
-            raise ClockException('out of index: ' + str(index))
+    @__checkIndex
+    def cancel(self, index, **kw):
+        '''取消一次闹钟
+        传入0为默认值，关掉第一个到期闹钟
+        对单次闹钟：关闭
+        对星期重复：取消下一个提醒
+        对周期重复：以当前时间重新开始计时'''
+        now = getNow()
+        clocks = kw['clocks']
         
         # choose clock
-        now = getNow()
-        if index != 0:
-            clock = clocks[index - 1]
-        else: # close first expired
+        if index == 0: # choose first expired
             found = False
             for clock in clocks:
-                if clock['time'] <= now and clock['on']:
+                if clock['on'] and clock['time'] < now:
                     found = True
                     break
             if not found:
                 raise ClockException('no expired clock')
+        else:
+            clock = clocks[index - 1]
         
-        # close it
-        if clock['repeat'] == None:
+        # cancel it
+        if not clock['repeat']:
             clock['on'] = False
         else:
             if type(clock['repeat']) == str:
@@ -318,41 +328,58 @@ class ClockManager(object):
     
     @synchronized(data)
     def switch(self, indexs):
-        '''0 stands for the first one(1)'''
-        if len(indexs) == 0:
-            indexs = [1]
+        '''变换开关
+        传入空列表为默认值，改变第一个到期闹钟或者第一个闹钟
+        会重置提醒时间为闹钟时间
+        对星期重复：以当前时间为准，重置为下一个闹钟时间
+        对周期重复：开启时以当前时间重新开始计时'''
         clocks = data.get()
         now = getNow()
-        for i, clock in enumerate(clocks):
-            if i+1 in indexs:
-                clock['on'] = not clock['on']
-                if clock['repeat']:
-                    if type(clock['repeat']) == str: # always renew 'weekday'
-                        clock['time'] = self.__resetWeekday(now, clock['time'], clock['repeat'])
-                    else:
-                        if clock['on']: # renew 'period' when open
-                            clock['time'] = now + clock['repeat']
-                clock['remindTime'] = clock['time']
+        
+        # choose clock(s)
+        chooseds = []
+        if len(indexs) == 0:
+            found = False
+            for clock in clocks:
+                if clock['on'] and clock['time'] < now:
+                    chooseds = [clock]
+                    found = True
+                    break
+            if not found:
+                chooseds = [clocks[0]]
+        else:
+            for i, clock in enumerate(clocks):
+                if i + 1 in indexs:
+                    chooseds.append(clock)
+        
+        # swith them
+        for clock in chooseds:
+            clock['on'] = not clock['on']
+            if clock['repeat']:
+                if type(clock['repeat']) == str: # always renew 'weekday'
+                    clock['time'] = self.__resetWeekday(now, clock['time'], clock['repeat'])
+                else:
+                    if clock['on']: # renew 'period' when open
+                        clock['time'] = now + clock['repeat']
+            clock['remindTime'] = clock['time'] # always reset remind time, seems right?
         clocks.sort(key=self.__sort)
         return
     
     @synchronized(data)
     def remove(self, indexs):
-        '''0 stands for the first one(1)'''
-        if len(indexs) == 0:
-            indexs = [1]
         clocks = []
         for i, clock in enumerate(data.get()):
-            if i+1 not in indexs:
+            if i + 1 not in indexs:
                 clocks.append(clock)
         data.set(clocks)
         return
     
     @synchronized(data)
     def later(self, time):
-        '''remind me at a later @Parameter time'''
+        '''对到期闹钟：设置为指定时间时提醒（一般是推迟）'''
+        now = getNow()
         for clock in data.get():
-            if clock['remindTime'] < time:
+            if clock['on'] and clock['time'] < now: # former hint it reached
                 clock['remindTime'] = time
         return
     
@@ -421,6 +448,7 @@ class OutputManager(object):
             if alarm and count > 10 * self.__last:
                 alarm = False
                 self.__clockManager.later(getNow() + remindDelay)
+                self.clsAndPrintList()
             if alarm:
                 if count % 5 == 0:
                     self.__cls()
@@ -496,15 +524,15 @@ try:
                 manager.edit(index, msg)
                 continue
             # edit time
-            if order.startswith('et'):
+            if order.startswith('w'):
                 index, remain = parseIndexWithDefaultZero(remain)
                 target, remain = parseDateTimeByOrder(order, remain, zero, now)
                 manager.editTime(index, target)
                 continue
-            # close alarm
+            # cancel alarm
             if order == 'a':
                 index, unused = parseIndexWithDefaultZero(remain)
-                manager.close(index)
+                manager.cancel(index)
                 continue
             # switch
             if order == 's':
@@ -514,6 +542,8 @@ try:
             # remove clock
             if order == 'r':
                 indexs = parseAllToIndex(remain)
+                if len(indexs) == 0:
+                    raise ClockException('no index')
                 manager.remove(indexs)
                 continue
             
