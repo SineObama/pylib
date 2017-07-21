@@ -190,7 +190,8 @@ class ClockException(Exception):
 class ClockManager(object):
     __filename = 'clocks.binv2'
     
-    def __resetWeekday(self, now, time, repeat):
+    def __getNextFromWeekday(self, now, time, repeat):
+        '''根据当前时间，为星期重复闹钟选择下一个时间'''
         nexttime = now.replace(hour=time.hour, minute=time.minute, second=time.second, microsecond=time.microsecond)
         while nexttime <= now or str(nexttime.weekday()+1) not in repeat:
             nexttime += self.__day
@@ -200,13 +201,13 @@ class ClockManager(object):
         from sine.helpers import PresistentManager
         self.__presistent = PresistentManager()
         self.__day = datetime.timedelta(1)
-        self.__sort = lambda x:x['time']
+        self.__sort = lambda x:(x['time'] if x['on'] else datetime.datetime.max)
         clocks = self.__presistent.getOrDefault(self.__filename, [])
         # 只更新过期的星期重复闹钟
         now = getNow()
         for clock in clocks:
             if clock['time'] < now and type(clock['repeat']) == str:
-                clock['time'] = self.__resetWeekday(now, clock['time'], clock['repeat'])
+                clock['time'] = self.__getNextFromWeekday(now, clock['time'], clock['repeat'])
                 clock['remindTime'] = clock['time']
         clocks.sort(key=self.__sort)
         data.acquire()
@@ -220,13 +221,16 @@ class ClockManager(object):
         return
     
     @synchronized(data)
-    def getExpireds(self): # 供Output提示
-        expireds = []
+    def getReminds(self): # 供Output提示
+        return self.__getReminds(data.get());
+    
+    def __getReminds(self, clocks):
+        reminds = []
         now = getNow()
-        for clock in data.get():
+        for clock in clocks:
             if clock['on'] and clock['remindTime'] <= now:
-                expireds.append(clock)
-        return expireds
+                reminds.append(clock)
+        return reminds
 
     def addOnce(self, date_time, msg=''):
         return self.__add(AlarmClock(date_time, msg))
@@ -291,24 +295,24 @@ class ClockManager(object):
     @__checkIndex
     def cancel(self, index, **kw):
         '''取消一次闹钟
-        传入0为默认值，关掉第一个到期闹钟
+        传入0为默认值，关掉第一个提醒或到期闹钟
         对单次闹钟：关闭
         对星期重复：取消下一个提醒
-        对周期重复：以当前时间重新开始计时'''
+        对周期重复：以当前时间重新开始计时
+        对关闭的闹钟无效'''
         now = getNow()
         clocks = kw['clocks']
         
         # choose clock
         if index == 0: # choose first expired
-            found = False
-            for clock in clocks:
-                if clock['on'] and clock['time'] < now:
-                    found = True
-                    break
-            if not found:
-                raise ClockException('no expired clock')
+            clock = self.__getFirstRemindOrExpired(clocks, now)
+            if not clock:
+                raise ClockException('no remind or expired clock')
         else:
             clock = clocks[index - 1]
+        
+        if not clock['on']:
+            raise ClockException('the clock is off, can not cancel')
         
         # cancel it
         if not clock['repeat']:
@@ -329,24 +333,18 @@ class ClockManager(object):
     @synchronized(data)
     def switch(self, indexs):
         '''变换开关
-        传入空列表为默认值，改变第一个到期闹钟或者第一个闹钟
+        传入空列表为默认值，改变第一个提醒或到期闹钟，或者第一个闹钟
         会重置提醒时间为闹钟时间
-        对星期重复：以当前时间为准，重置为下一个闹钟时间
-        对周期重复：开启时以当前时间重新开始计时'''
+        对星期重复：开启时以当前时间为准，重置为下一个闹钟时间
+        对周期重复：开启时如果过期，则以当前时间重新开始计时'''
         clocks = data.get()
         now = getNow()
         
         # choose clock(s)
         chooseds = []
         if len(indexs) == 0:
-            found = False
-            for clock in clocks:
-                if clock['on'] and clock['time'] < now:
-                    chooseds = [clock]
-                    found = True
-                    break
-            if not found:
-                chooseds = [clocks[0]]
+            found = self.__getFirstRemindOrExpired(clocks, now)
+            chooseds = [found if found else clocks[0]]
         else:
             for i, clock in enumerate(clocks):
                 if i + 1 in indexs:
@@ -355,15 +353,27 @@ class ClockManager(object):
         # swith them
         for clock in chooseds:
             clock['on'] = not clock['on']
-            if clock['repeat']:
-                if type(clock['repeat']) == str: # always renew 'weekday'
-                    clock['time'] = self.__resetWeekday(now, clock['time'], clock['repeat'])
+            if clock['on'] and clock['time'] < now and clock['repeat']:
+                if type(clock['repeat']) == str:
+                    clock['time'] = self.__getNextFromWeekday(now, clock['time'], clock['repeat'])
                 else:
-                    if clock['on']: # renew 'period' when open
-                        clock['time'] = now + clock['repeat']
+                    clock['time'] = now + clock['repeat']
             clock['remindTime'] = clock['time'] # always reset remind time, seems right?
         clocks.sort(key=self.__sort)
         return
+    
+    def __getFirstRemindOrExpired(self, clocks, now):
+        found = None
+        for clock in clocks:
+            if clock['on'] and clock['remindTime'] <= now:
+                found = clock
+                break
+        if not found:
+            for clock in clocks:
+                if clock['on'] and clock['time'] < now:
+                    found = clock
+                    break
+        return found
     
     @synchronized(data)
     def remove(self, indexs):
@@ -376,11 +386,17 @@ class ClockManager(object):
     
     @synchronized(data)
     def later(self, time):
-        '''对到期闹钟：设置为指定时间时提醒（一般是推迟）'''
-        now = getNow()
-        for clock in data.get():
-            if clock['on'] and clock['time'] < now: # former hint it reached
+        '''有正在提醒的闹钟：设置他们为指定时间再提醒
+        没有：设置所有到期闹钟为指定时间再提醒'''
+        reminds = self.__getReminds(data.get())
+        if len(reminds):
+            for clock in reminds:
                 clock['remindTime'] = time
+        else:
+            now = getNow()
+            for clock in data.get():
+                if clock['on'] and clock['time'] < now: # former hint it reached
+                    clock['remindTime'] = time
         return
     
 
@@ -439,11 +455,11 @@ class OutputManager(object):
         while 1:
             if self.__quit:
                 break
-            expireds = self.__clockManager.getExpireds()
-            if not alarm and len(expireds):
+            reminds = self.__clockManager.getReminds()
+            if not alarm and len(reminds):
                 alarm = True
                 count = 0
-            if alarm and not len(expireds):
+            if alarm and not len(reminds):
                 alarm = False
             if alarm and count > 10 * self.__last:
                 alarm = False
@@ -454,7 +470,7 @@ class OutputManager(object):
                     self.__cls()
                 if count % 5 == 1:
                     string = ''
-                    for clock in expireds:
+                    for clock in reminds:
                         string += str(clock) + '\n'
                     sys.stdout.write(string)
                 if count % 5 == 1 or count % 5 == 3:
