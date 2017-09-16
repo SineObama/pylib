@@ -209,10 +209,10 @@ def addEditPage(clock):
                 return 1
             # edit message
             if order == 'm':
-                msg, unused = parseString(remain)
-                clock['msg'] = msg
+                clock['msg'] = remain
                 return 1
             
+            print 'wrong order'
             return -1
         except ParseException as e:
             print e

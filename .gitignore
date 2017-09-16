@@ -2,4 +2,4 @@
 !*/
 !.gitignore
 !*.py
-!*/app/*.txt
+!**/MultiAlarmClock/*.txt

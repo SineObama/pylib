@@ -53,6 +53,9 @@ class ClockManager(object):
         return reminds
 
     def addOnce(self, date_time, msg=''):
+        now = getNow()
+        if date_time <= now:
+           date_time = self.__getNextFromWeekday(now, date_time, '1234567')
         return self.__add(AlarmClock(date_time, msg))
 
     def addRepeatWeekday(self, start_time, repeat, msg=''):
@@ -171,11 +174,15 @@ class ClockManager(object):
         # swith them
         for clock in chooseds:
             clock['on'] = not clock['on']
-            if clock['on'] and clock['time'] < now and clock['repeat']:
-                if type(clock['repeat']) == str:
-                    clock['time'] = self.__getNextFromWeekday(now, clock['time'], clock['repeat'])
+            if clock['on'] and clock['time'] < now:
+                if clock['repeat']:
+                    if type(clock['repeat']) == str:
+                        clock['time'] = self.__getNextFromWeekday(now, clock['time'], clock['repeat'])
+                    else:
+                        clock['time'] = now + clock['repeat']
                 else:
-                    clock['time'] = now + clock['repeat']
+                    if clock['time'] <= now:
+                        clock['time'] = self.__getNextFromWeekday(now, clock['time'], '1234567')
             clock['remindTime'] = clock['time'] # always reset remind time, seems right?
         clocks.sort(key=self.__sort)
         return
