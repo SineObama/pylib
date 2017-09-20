@@ -60,8 +60,6 @@ class ClockManager(object):
 
     def addRepeatWeekday(self, start_time, repeat, msg=''):
         '''按星期重复，输入开始的时间和重复星期编号字符串，比如星期一和星期二就是'12' '''
-        if repeat == '':
-            raise ClockException('repeat can not be empty')
         d = {}
         for i in '1234567':
             d[i] = False
@@ -70,6 +68,8 @@ class ClockManager(object):
         weekdays = ''
         for i in '1234567':
             weekdays += i if d[i] else ' '
+        if weekdays == '       ':
+            raise ClockException('repeat can not be empty')
         while str(start_time.weekday()+1) not in weekdays:
             start_time += self.__day
         return self.__add(AlarmClock(start_time, msg, weekdays))
@@ -105,10 +105,17 @@ class ClockManager(object):
     def editTime(self, index, date_time, **kw): # and turn on
         if index == 0:
             index = 1
+        now = getNow()
         clocks = kw['clocks']
-        clocks[index - 1]['time'] = date_time
-        clocks[index - 1]['remindTime'] = date_time
-        clocks[index - 1]['on'] = True
+        clock = clocks[index - 1]
+        if date_time <= now:
+            if not clock['repeat']:
+                date_time = self.__getNextFromWeekday(now, date_time, '1234567')
+            if type(clock['repeat']) == str:
+                date_time = self.__getNextFromWeekday(now, date_time, clock['repeat'])
+        clock['time'] = date_time
+        clock['remindTime'] = date_time
+        clock['on'] = True
         clocks.sort(key=self.__sort)
         return
     
@@ -140,10 +147,7 @@ class ClockManager(object):
             clock['on'] = False
         else:
             if type(clock['repeat']) == str:
-                nexttime = clock['time']
-                nexttime += self.__day
-                while str(nexttime.weekday()+1) not in clock['repeat']:
-                    nexttime += self.__day
+                nexttime = self.__getNextFromWeekday(clock['time'], clock['time'], clock['repeat'])
             else:
                 nexttime = now + clock['repeat']
             clock['time'] = nexttime
