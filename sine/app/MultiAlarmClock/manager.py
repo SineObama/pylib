@@ -70,8 +70,7 @@ class ClockManager(object):
             weekdays += i if d[i] else ' '
         if weekdays == '       ':
             raise ClockException('repeat can not be empty')
-        while str(start_time.weekday()+1) not in weekdays:
-            start_time += self.__day
+        start_time = self.__getNextFromWeekday(getNow(), start_time, weekdays)
         return self.__add(AlarmClock(start_time, msg, weekdays))
 
     def addRepeatPeriod(self, start_time, delta, msg=''):
