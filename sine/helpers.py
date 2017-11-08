@@ -1,5 +1,14 @@
 # coding=utf-8
 
+def substitute(array):
+    import random
+    for i in range(1, len(array)):
+        j = random.randint(0, i)
+        temp = array[i]
+        array[i] = array[j]
+        array[j] = temp
+    return array
+
 def diff(y1, y2):
     '''
     比较两个一维数组不一样的元素个数
