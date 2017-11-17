@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
 
 
 import sys
@@ -11,21 +11,27 @@ from sine.helpers import substitute
 move = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)]
 
 
-# In[2]:
+# In[ ]:
 
 # settings
 button_width = 2
 width = 10
 height = 10
 mines = 10
-mine = '*'
-pressed_color = '#FFFFFF'
-mine_color = 'red'
+ch = {'mine':'*', 'flag':'F', 'unknown':'?', 'restart':'R', 'win':'O'}
+enable_unknown = True
+color = {'explored':'#FFFFFF', 'mine':'red'}
 
 
-# In[3]:
+# In[ ]:
 
 class MineMap:
+    '''
+    properties:
+    explored: 
+    around: number of mines in 8 block surround, -1 for this block is mine
+    state: 0 normal, 1 mark, 2 unknown (as classical)
+    '''
     def __init__(self, width=10, height=10, mines=10):
         '''
         @param mines will be adjust that at lease 1 place is not mine
@@ -45,8 +51,9 @@ class MineMap:
         d = {}
         for x in range(1, self.width + 1):
             for y in range(1, self.height + 1):
-                d[(x, y)] = {'stepped':False}
+                d[(x, y)] = {'explored':False}
                 d[(x, y)]['around'] = -1 if m[x*self.height-self.height+y-1] < self.mines else 0
+                d[(x, y)]['state'] = 0
         for x in range(1, self.width + 1):
             for y in range(1, self.height + 1):
                 if (d[(x, y)]['around'] == -1):
@@ -56,6 +63,7 @@ class MineMap:
                         if (x2 > 0 and x2 <= self.width and y2 > 0 and y2 <= self.height and d[(x2, y2)]['around'] >= 0):
                             d[(x2, y2)]['around'] += 1
         self.dict = d
+        return
     def __getitem__(self, (x, y)):
         '''
         x ~ [1, width]
@@ -83,61 +91,107 @@ class MineMap:
         return
 
 
-# In[4]:
+# In[ ]:
 
 m = MineMap(width, height, mines)
+unexlpores = width * height - mines
 stopped = False
-def once(d, x, y):
+
+def stop():
+    global stopped
+    stopped = True
+    return
+
+def win():
+    restart['text'] = ch['win']
+    return
+
+def runing(f):
+    '''
+    decorator: 必须在游戏运行时（未结束）
+    '''
+    global stopped
+    def func(*args, **kwargs):
+        if not stopped:
+            f(*args, **kwargs)
+    return func
+
+def explore(d, x, y):
     # 重复判断累赘？
     if (x < 1 or x > m.width):
         return
     if (y < 1 or y > m.height):
         return
-    if m[(x, y)]['stepped']:
+    if m[(x, y)]['explored'] or m[(x, y)]['state'] == 1: # never explore flag
         return
-    m[(x, y)]['stepped'] = True
+    m[(x, y)]['explored'] = True
+    m[(x, y)]['state'] = 0
     button = m[(x, y)]['button']
     button['state'] = DISABLED
-    button['bg'] = pressed_color
+    button['bg'] = color['explored']
     around = m[(x, y)]['around']
     d[(x, y)] = around
+    global unexlpores
+    unexlpores -= 1
     if around == 0:
+        button['text'] = ''
         for (x1, y1) in move:
-            once(d, x + x1, y + y1)
+            explore(d, x + x1, y + y1)
     else:
         button['text'] = around
-def press(x, y):
-    global stopped
-    if stopped:
-        return {}
-    print x, y
+    return
+
+@runing
+def onLeftClick(x, y):
+    if m[(x, y)]['explored'] or m[(x, y)]['state'] == 1:
+        return
+    print 'left', x, y
     n = m[(x, y)]['around']
     if n == -1:
         button = m[(x, y)]['button']
         button['state'] = DISABLED
-        button['text'] = mine
-        button['bg'] = mine_color
-        stopped = True
+        button['text'] = ch['mine']
+        button['bg'] = color['mine']
+        stop()
         return {((x, y), -1)}
     d = {}
-    once(d, x, y)
+    explore(d, x, y)
+    if unexlpores <= 0:
+        win()
     return d
-def generate(x, y):
-    def func():
-        press(x, y)
+
+@runing
+def onRightClick(x, y):
+    if m[(x, y)]['explored']:
+        return
+    print 'right', x, y
+    block = m[(x, y)]
+    block['state'] = (block['state'] + 1) % (3 if enable_unknown else 2)
+    if block['state'] == 0:
+        block['button']['text'] = ''
+    elif block['state'] == 1:
+        block['button']['text'] = ch['flag']
+    else:
+        block['button']['text'] = ch['unknown']
+    return
+
+def generate(f, *args):
+    def func(*unused, **unused2):
+        f(*args)
     return func
 
 
-# In[5]:
+# In[ ]:
 
 root = Tk()
-b = Button(root, text='R', width=button_width)
-b.pack(side="top")
+restart = Button(root, text=ch['restart'], width=button_width)
+restart.pack(side="top")
 for x in range(1, width + 1):
     frm = Frame()
     for y in range(1, height + 1):
-        b = Button(frm, text='', width=button_width, command=generate(x, y), bd=3)
+        b = Button(frm, text='', width=button_width, command=generate(onLeftClick, x, y), bd=3)
         b.pack(side="top")
+        b.bind('<Button-3>', generate(onRightClick, x, y))
         m[(x, y)]['button'] = b
     frm.pack(side='left')
 root.mainloop()
