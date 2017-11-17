@@ -10,6 +10,7 @@ sys.path.append('D:\Users\Git\pylib')
 # In[ ]:
 
 from sine.decorator import synchronized
+from sine.api import FlashWindow
 from exception import ClockException, ParseException
 from parsing import *
 from mydatetime import *
@@ -23,7 +24,6 @@ import data
 import threading
 import winsound
 import time
-import win32gui
 
 
 # In[ ]:
@@ -285,7 +285,7 @@ def __alarm():
         if alarm:
             player.play(sound if sound != None else '')
             if count % 10 == 0:
-                win32gui.FlashWindow(hWnd, 1)
+                FlashWindow()
             if count % 5 == 0:
                 cls()
             if count % 5 == 1:
@@ -305,11 +305,7 @@ __alarmThread = None
 def init():
     global __alarmThread
     global __quit
-    global hWnd
-    import win32api
     __quit = False
-    s = win32api.GetConsoleTitle()
-    hWnd = win32gui.FindWindow(0,s)
     addMainPage()
     __alarmThread = threading.Thread(target=__alarm)
     __alarmThread.setDaemon(True)
