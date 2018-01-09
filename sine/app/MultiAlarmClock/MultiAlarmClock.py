@@ -4,7 +4,7 @@
 # In[ ]:
 
 import sys
-sys.path.append('D:\Users\Git\pylib')
+sys.path.append('D:\pylib')
 
 
 # In[ ]:
