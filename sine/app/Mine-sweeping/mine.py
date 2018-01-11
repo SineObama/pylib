@@ -43,7 +43,7 @@ class MineMap:
         self.mines = mines
         self.started = False
         return
-    def __start(self, (x0, y0)):
+    def _start(self, (x0, y0)):
         m = range(self.width * self.height)
         substitute(m)
         while (m[x0*self.height-self.height+y0-1]<self.mines):
@@ -75,7 +75,7 @@ class MineMap:
         if (y < 1 or y > self.height):
             return
         if (not self.started):
-            self.__start((x, y))
+            self._start((x, y))
             self.started = True
         return self.dict[(x, y)]
     def show(self, mine='.', blank=' '):
