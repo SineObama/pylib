@@ -1,50 +1,50 @@
 # coding=utf-8
-'''“闹铃”播放器，为了方便多次调用（可以重复调用，连续两次使用同样的值不会产生影响）
-play(wav_filename)循环播放wav音频
-play('')原版beep声
-play(None)停止'''
+'''
+“闹铃”播放器。可多次调用，前后值相同不会产生影响。
+唯一接口：
+play(wav_filename)循环播放wav音频（带后缀）
+play('')原版windows beep声（win7可能不适用）
+play(None)停止
+此外还可以用系统声音：
+'SystemAsterisk' Asterisk
+'SystemExclamation' Exclamation
+'SystemExit' Exit Windows
+'SystemHand' Critical Stop
+'SystemQuestion' Question
+'''
 
-import threading as __threading
-import winsound as __winsound
-import time as __time
+from sine.threads import ReStartableThread as _ReStartableThread
 
-__quit = True
-__name = None
-__alarmThread = None
+import winsound as _winsound
 
-def __alarm():
-    global __quit
+def _alarm(stop_event):
+    import time
     count = 0
     while 1:
-        if __quit:
+        if stop_event.is_set():
             break
         if count % 5 == 1 or count % 5 == 3:
-            __winsound.Beep(600, 50)
+            _winsound.Beep(600, 50)
         count += 1
-        __time.sleep(0.1)
+        time.sleep(0.1)
     return
 
+_name = None
+_alarmThread = _ReStartableThread(_alarm)
+
 def play(name):
-    global __quit
-    global __name
-    global __alarmThread
-    if __name == name:
+    global _name
+    if _name == name:
         return
-    if __name != None: # 正在播
-        if __name == '':
-            __quit = True
-            __alarmThread.join(2)
-            if __alarmThread.is_alive():
-                raise RuntimeError('thread can not exit')
+    if _name != None: # 正在播则停止当前beep或者音乐
+        if _name == '':
+            _alarmThread.stop()
         else:
-            __winsound.PlaySound(None, __winsound.SND_PURGE)
+            _winsound.PlaySound(None, _winsound.SND_PURGE)
     if name != None:
         if name == '': # default beep
-            __quit = False
-            __alarmThread = __threading.Thread(target=__alarm)
-            __alarmThread.setDaemon(True)
-            __alarmThread.start()
+            _alarmThread.start()
         else:
-            __winsound.PlaySound(name, __winsound.SND_FILENAME | __winsound.SND_ASYNC | __winsound.SND_LOOP)
-    __name = name
+            _winsound.PlaySound(name, _winsound.SND_ALIAS | _winsound.SND_ASYNC | _winsound.SND_LOOP)
+    _name = name
     return

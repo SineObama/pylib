@@ -1,5 +1,10 @@
 # coding=utf-8
 
+def cls():
+    import os
+    os.system('cls')
+    return
+
 def substitute(array):
     import random
     for i in range(1, len(array)):
@@ -33,25 +38,3 @@ def info(*args):
     for i in args:
         string += (str(i) + ' ')
     sys.stdout.write(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f ') + string + '\n')
-
-from sine.decorator import singleton as __singleton
-@__singleton
-class PresistentManager(object):
-    '''
-    write and read object from disk
-    '''
-    import pickle as __pickle
-
-    def getOrDefault(self, path, defalut=None):
-        try:
-            f = open(path, 'rb')
-            rtn = self.__pickle.load(f)
-            f.close()
-        except IOError:
-            rtn = defalut
-        return rtn
-
-    def set(self, path, obj):
-        f = open(path, 'wb')
-        self.__pickle.dump(obj, f)
-        f.close()

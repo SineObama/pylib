@@ -3,30 +3,35 @@
 
 # In[ ]:
 
+
+# add liberary root path
 import sys
-sys.path.append('D:\pylib')
+import os
+if len(sys.path[0]) == 0: # develop time using jupyter notebook on current path
+    curPath = os.getcwd()
+else:
+    curPath = sys.path[0]
+root = os.path.dirname(os.path.dirname(os.path.dirname(curPath)))
+sys.path.append(root)
 
 
 # In[ ]:
 
-from sine.decorator import synchronized
-from sine.api import FlashWindow
+
+from sine.sync import synchronized
+from sine.helpers import cls
 from exception import ClockException, ParseException
 from parsing import *
 from mydatetime import *
 from entity import AlarmClock
 from manager import instance as manager
 import data
+import player
+import listenThread
 
 
 # In[ ]:
 
-import threading
-import winsound
-import time
-
-
-# In[ ]:
 
 # 栈管理“页面”
 # 每一块是一个字典
@@ -34,30 +39,22 @@ import time
 # key 'reprint' 为输出页面的函数
 # 字典中还可以自定义放别的东西……
 stack = []
-stackMutex = threading.Lock()
+@synchronized('stack')
 def append(dic):
-    stackMutex.acquire()
     stack.append(dic)
     if dic.has_key('reprint'):
         dic['reprint']()
-    stackMutex.release()
     return
+@synchronized('stack')
 def pop():
-    stackMutex.acquire()
     rtn = stack.pop()
     if len(stack):
         stack[len(stack) - 1]['reprint']()
-    stackMutex.release()
     return rtn
-
-# 清屏
-import os
-def cls():
-    os.system('cls')
-    return
 
 
 # In[ ]:
+
 
 remindDelay = datetime.timedelta(0, 300) # 5 minutes
 
@@ -68,11 +65,10 @@ def addMainPage():
     @synchronized(data)
     def clsAndPrintList():
         cls()
-        clocks = data.get()
         now = getNow()
-        if len(clocks):
+        if len(data.clocks):
             string = 'alarm clocks:\n'
-            for i, clock in enumerate(clocks):
+            for i, clock in enumerate(data.clocks):
                 string += '%s %3s %3d %3s %s\n'%(clock['time'].strftime('%Y-%m-%d %H:%M:%S'),
                                                 ('!!!' if clock['time'] <= now and clock['on'] else ''),
                                                  i+1,
@@ -252,64 +248,19 @@ def addAlarmPage():
 
 # In[ ]:
 
-# 监控线程
 
-__quit = False
-__last = 30
-
-def __alarm():
-    import player
-    count = 0
-    alarm = False
-    while 1:
-        if __quit: # TODO thread safe?
-            break
-        reminds = manager.getReminds()
-        length = len(reminds)
-        if length:
-            sound = reminds[len(reminds) - 1]['sound']
-        if not alarm and length:
-            alarm = True
-            player.play('' if sound == None else sound)
-            count = 0
-            addAlarmPage()
-        if alarm and not len(reminds):
-            alarm = False
-            player.play(None)
-            pop()
-        if alarm and count > 10 * __last:
-            alarm = False
-            player.play(None)
-            manager.later(getNow() + remindDelay)
-            pop()
-        if alarm:
-            player.play(sound if sound != None else '')
-            if count % 10 == 0:
-                FlashWindow()
-            if count % 5 == 0:
-                cls()
-            if count % 5 == 1:
-                string = ''
-                for clock in reminds:
-                    string += str(clock) + '\n'
-                sys.stdout.write(string)
-        count += 1
-        time.sleep(0.1)
-    return
+listenThread.remindDelay = remindDelay
+listenThread.on = addAlarmPage
+listenThread.off = pop
 
 
 # In[ ]:
 
+
 # main flow
-__alarmThread = None
 def init():
-    global __alarmThread
-    global __quit
-    __quit = False
     addMainPage()
-    __alarmThread = threading.Thread(target=__alarm)
-    __alarmThread.setDaemon(True)
-    __alarmThread.start()
+    listenThread.start()
     return
 
 def do(order):
@@ -320,17 +271,13 @@ def do(order):
     return 0 if len(stack) == 0 else None
 
 def stop():
-    global __quit
-    __quit = True
-    winsound.PlaySound(None, winsound.SND_PURGE)
-    if __alarmThread:
-        __alarmThread.join(2)
-        if __alarmThread.is_alive():
-            raise RuntimeError('thread can not exit')
+    player.play(None)
+    listenThread.stop()
     return
 
 
 # In[ ]:
+
 
 # main loop
 try:
