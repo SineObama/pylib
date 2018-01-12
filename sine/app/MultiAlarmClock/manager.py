@@ -1,16 +1,16 @@
 # coding=utf-8
 
-import data
 from mydatetime import *
 import sine.myPickle as _pickle
 from sine.sync import *
 from exception import ClockException
 from entity import AlarmClock
-from data import clocks
+from data import data
+import sys
 
 class ClockManager(object):
     '''indexes used for specification are showed from 1, and stored from 0 of course, and 0 maybe used for default'''
-    _filename = 'clocks.binv2'
+    _filename = data['config']['datafile']
     
     def _getNextFromWeekday(self, now, time, repeat):
         '''根据当前时间，为星期重复闹钟选择下一个时间'''
@@ -20,30 +20,32 @@ class ClockManager(object):
         return nexttime
 
     def __init__(self):
-        global clocks
         self._day = datetime.timedelta(1)
         self._sort = lambda x:(x['time'] if x['on'] else datetime.datetime.max)
         acquire(data)
-        data.clocks = _pickle.load(self._filename, [])
-        clocks = data.clocks
+        try:
+            data['clocks'] = _pickle.load(self._filename, [])
+        except Exception, e:
+            print 'load from file', _filename, 'failed'
+            sys.exit(1)
         # 只更新过期的星期重复闹钟
         now = getNow()
-        for clock in clocks:
+        for clock in data['clocks']:
             if clock['time'] < now and type(clock['repeat']) == str:
                 clock['time'] = self._getNextFromWeekday(now, clock['time'], clock['repeat'])
                 clock['remindTime'] = clock['time']
-        clocks.sort(key=self._sort)
+        data['clocks'].sort(key=self._sort)
         release(data)
         return
     
     @synchronized(data)
     def save(self):
-        _pickle.dump(self._filename, clocks)
+        _pickle.dump(self._filename, data['clocks'])
         return
     
     @synchronized(data)
     def getReminds(self): # 供Output提示
-        return self._getReminds(clocks);
+        return self._getReminds(data['clocks']);
     
     def _getReminds(self, clocks):
         reminds = []
@@ -79,13 +81,13 @@ class ClockManager(object):
     
     @synchronized(data)
     def _add(self, clock):
-        clocks.append(clock)
-        clocks.sort(key=self._sort)
+        data['clocks'].append(clock)
+        data['clocks'].sort(key=self._sort)
         return
     
     def _checkIndex(f):
         def _f(self, index, *args, **kw):
-            if index > len(clocks) or index < 0:
+            if index > len(data['clocks']) or index < 0:
                 raise ClockException('index out of range: ' + str(index))
             return f(self, index, *args, **kw)
         return _f
@@ -95,7 +97,7 @@ class ClockManager(object):
     def get(self, index, **kw):
         if index == 0:
             index = 1
-        return clocks[index - 1]
+        return data['clocks'][index - 1]
     
     @synchronized(data)
     @_checkIndex
@@ -103,7 +105,7 @@ class ClockManager(object):
         if index == 0:
             index = 1
         now = getNow()
-        clock = clocks[index - 1]
+        clock = data['clocks'][index - 1]
         if date_time <= now:
             if not clock['repeat']:
                 date_time = self._getNextFromWeekday(now, date_time, '1234567')
@@ -112,7 +114,7 @@ class ClockManager(object):
         clock['time'] = date_time
         clock['remindTime'] = date_time
         clock['on'] = True
-        clocks.sort(key=self._sort)
+        data['clocks'].sort(key=self._sort)
         return
     
     @synchronized(data)
@@ -128,11 +130,11 @@ class ClockManager(object):
         
         # choose clock
         if index == 0: # choose first expired
-            clock = self._getFirstRemindOrExpired(clocks, now)
+            clock = self._getFirstRemindOrExpired(data['clocks'], now)
             if not clock:
                 raise ClockException('no remind or expired clock')
         else:
-            clock = clocks[index - 1]
+            clock = data['clocks'][index - 1]
         
         if not clock['on']:
             raise ClockException('the clock is off, can not cancel')
@@ -147,7 +149,7 @@ class ClockManager(object):
                 nexttime = now + clock['repeat']
             clock['time'] = nexttime
             clock['remindTime'] = nexttime
-        clocks.sort(key=self._sort)
+        data['clocks'].sort(key=self._sort)
         return
     
     @synchronized(data)
@@ -162,10 +164,10 @@ class ClockManager(object):
         # choose clock(s)
         chooseds = []
         if len(indexs) == 0:
-            found = self._getFirstRemindOrExpired(clocks, now)
-            chooseds = [found if found else clocks[0]]
+            found = self._getFirstRemindOrExpired(data['clocks'], now)
+            chooseds = [found if found else data['clocks'][0]]
         else:
-            for i, clock in enumerate(clocks):
+            for i, clock in enumerate(data['clocks']):
                 if i + 1 in indexs:
                     chooseds.append(clock)
         
@@ -182,7 +184,7 @@ class ClockManager(object):
                     if clock['time'] <= now:
                         clock['time'] = self._getNextFromWeekday(now, clock['time'], '1234567')
             clock['remindTime'] = clock['time'] # always reset remind time, seems right?
-        clocks.sort(key=self._sort)
+        data['clocks'].sort(key=self._sort)
         return
     
     def _getFirstRemindOrExpired(self, clocks, now):
@@ -200,25 +202,24 @@ class ClockManager(object):
     
     @synchronized(data)
     def remove(self, indexs):
-        global clocks
         clocks = []
-        for i, clock in enumerate(data.clocks):
+        for i, clock in enumerate(data['clocks']):
             if i + 1 not in indexs:
                 clocks.append(clock)
-        data.clocks = clocks
+        data['clocks'] = clocks
         return
     
     @synchronized(data)
     def later(self, time):
         '''有正在提醒的闹钟：设置他们为指定时间再提醒
         没有：设置所有到期闹钟为指定时间再提醒'''
-        reminds = self._getReminds(clocks)
+        reminds = self._getReminds(data['clocks'])
         if len(reminds):
             for clock in reminds:
                 clock['remindTime'] = time
         else:
             now = getNow()
-            for clock in clocks:
+            for clock in data['clocks']:
                 if clock['on'] and clock['time'] < now: # former hint it reached
                     clock['remindTime'] = time
         return

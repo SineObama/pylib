@@ -2,7 +2,7 @@
 
 '''
 监听线程。检查闹钟状态并进行屏幕闪烁和播放铃声。
-需要设置提醒延迟remindDelay，启动回调on和关闭回调off。
+需要设置提醒延迟remindDelay(datetime.timedelta)，启动回调on和关闭回调off。
 提供start和stop接口，可重复启动。
 '''
 

@@ -25,9 +25,10 @@ from parsing import *
 from mydatetime import *
 from entity import AlarmClock
 from manager import instance as manager
-import data
+from data import data
 import player
 import listenThread
+import sys
 
 
 # In[ ]:
@@ -56,7 +57,16 @@ def pop():
 # In[ ]:
 
 
-remindDelay = datetime.timedelta(0, 300) # 5 minutes
+remindDelay = datetime.timedelta(0, data['config']['alarm_interval'])
+
+def replace(so, t, t2, o):
+    '''对将要格式化的字符串，符合%[]t的，替换为以%[]t2格式化的o'''
+    import re
+    ss = re.findall(r'%[^%]*(?='+t+')', so)
+    for s in ss:
+        temp = (s+t2) % (o)
+        so = so.replace(s+t, temp, 1)
+    return so
 
 # 主页面：闹钟列表
 
@@ -66,14 +76,16 @@ def addMainPage():
     def clsAndPrintList():
         cls()
         now = getNow()
-        if len(data.clocks):
+        if len(data['clocks']):
+            config = data['config']
             string = 'alarm clocks:\n'
-            for i, clock in enumerate(data.clocks):
-                string += '%s %3s %3d %3s %s\n'%(clock['time'].strftime('%Y-%m-%d %H:%M:%S'),
-                                                ('!!!' if clock['time'] <= now and clock['on'] else ''),
-                                                 i+1,
-                                                ('ON' if clock['on'] else 'OFF'),
-                                                clock['msg'])
+            for i, clock in enumerate(data['clocks']):
+                temp = clock['time'].strftime(config['format'])
+                temp = replace(temp, 'warn', 's', config['warn'] if clock['time'] <= now and clock['on'] else '')
+                temp = replace(temp, 'idx', 'd', i+1)
+                temp = replace(temp, 'state', 's', config['state.ON'] if clock['on'] else config['state.OFF'])
+                temp = replace(temp, 'msg', 's', clock['msg'])
+                string += temp + '\n'
         else:
             string = 'no clock\n'
         sys.stdout.write(string)
@@ -250,6 +262,7 @@ def addAlarmPage():
 
 
 listenThread.remindDelay = remindDelay
+listenThread.lastTime = data['config']['alarm_last']
 listenThread.on = addAlarmPage
 listenThread.off = pop
 
