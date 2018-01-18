@@ -4,13 +4,14 @@
 # In[ ]:
 
 
-# add liberary root path
+# 获取当前路径（用于在不同位置运行时找到当前路径下文件），并添加library根目录到系统路径sys.path
 import sys
 import os
 if len(sys.path[0]) == 0: # develop time using jupyter notebook on current path
     curPath = os.getcwd()
 else:
     curPath = sys.path[0]
+print 'current path:', curPath
 root = os.path.dirname(os.path.dirname(os.path.dirname(curPath)))
 sys.path.append(root)
 
@@ -18,17 +19,82 @@ sys.path.append(root)
 # In[ ]:
 
 
+#保存当前路径
+from data import data
+data['path0'] = curPath + '\\'
+
+
+# In[ ]:
+
+
+# 加载配置并检查。对于缺少的配置赋予默认值并暂停警告
+
+# 从文件读入，暂时保存为字符串
+_conf_filename = 'clock.conf'
+try:
+    f = open(data['path0'] + _conf_filename, 'rb')
+    config = {}
+    for line in f:
+        line = line.replace('\r', '').replace('\n', '')
+        if line.startswith('#') or line == '':
+            continue
+        tokens = line.split('=', 1)
+        if len(tokens) == 2:
+            config[tokens[0]] = tokens[1]
+        else:
+            config[tokens[0]] = True
+    f.close()
+except Exception, e:
+    print e
+    print 'load from file', _conf_filename, 'failed'
+    sys.exit(1)
+
+# 补充默认配置
+default_config = [
+('alarm_last', 30, int),
+('alarm_interval', 300, int),
+('format', '%Y-%m-%d %H:%M:%S %%warn %%3idx %%3state %%msg', str),
+('warn', '!!!', str),
+('state.ON', 'ON', str),
+('state.OFF', 'OFF', str),
+('datafile', 'clocks.binv2', str),
+('defaultSound', 'default', str)]
+
+warning = False
+for (key, default, converter) in default_config:
+    if not config.has_key(key):
+        print 'missing config \'' + key + '\', will use default value \'' + str(default) + '\''
+        warning = True
+        config[key] = default
+    elif converter:
+        try:
+            config[key] = converter(config[key])
+        except Exception, e:
+            print 'parsing config \'' + key + '=' + str(config[key]) + '\' failed, will use default value \'' + str(default) + '\'. exception is:' + repr(e)
+            warning = True
+
+data['config'] = config
+
+if warning:
+    print '\npress enter to continue'
+    raw_input()
+
+
+# In[ ]:
+
+
+# 外部依赖
+import datetime
+# library依赖
 from sine.sync import synchronized
 from sine.helpers import cls
+# 本地依赖
 from exception import ClockException, ParseException
 from parsing import *
-from mydatetime import *
+from mydatetime import getNow
 from entity import AlarmClock
-from manager import instance as manager
-from data import data
 import player
 import listenThread
-import sys
 
 
 # In[ ]:
@@ -287,6 +353,13 @@ def stop():
     player.play(None)
     listenThread.stop()
     return
+
+
+# In[ ]:
+
+
+# 模块初始化
+from manager import instance as manager
 
 
 # In[ ]:

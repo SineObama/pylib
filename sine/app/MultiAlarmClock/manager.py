@@ -24,7 +24,7 @@ class ClockManager(object):
         self._sort = lambda x:(x['time'] if x['on'] else datetime.datetime.max)
         acquire(data)
         try:
-            data['clocks'] = _pickle.load(self._filename, [])
+            data['clocks'] = _pickle.load(data['path0'] + self._filename, [])
         except Exception, e:
             print 'load from file', _filename, 'failed'
             sys.exit(1)
@@ -40,7 +40,7 @@ class ClockManager(object):
     
     @synchronized(data)
     def save(self):
-        _pickle.dump(self._filename, data['clocks'])
+        _pickle.dump(data['path0'] + self._filename, data['clocks'])
         return
     
     @synchronized(data)
@@ -81,6 +81,7 @@ class ClockManager(object):
     
     @synchronized(data)
     def _add(self, clock):
+        clock['sound'] = data['config']['defaultSound']
         data['clocks'].append(clock)
         data['clocks'].sort(key=self._sort)
         return

@@ -17,6 +17,7 @@ class AlarmClock(dict):
         self['msg'] = msg
         self['repeat'] = repeat
         self['on'] = True
+        self['sound'] = None
         return
     
     def __str__(self):
