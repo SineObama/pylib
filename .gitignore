@@ -2,5 +2,3 @@
 !*/
 !.gitignore
 !*.py
-!**/MultiAlarmClock/*.txt
-!**/MultiAlarmClock/clock.conf

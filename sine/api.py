@@ -1,4 +1,7 @@
 # coding=utf-8
+'''
+任务栏窗口闪烁api
+'''
 
 import win32api
 import win32gui

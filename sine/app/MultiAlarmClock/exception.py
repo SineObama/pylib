@@ -1,6 +1,12 @@
 # coding=utf-8
 
-class ClockException(Exception):
+
+class ClientException(Exception):
     pass
-class ParseException(Exception):
+class ClockException(ClientException):
     pass
+class ParseException(ClientException):
+    pass
+class NoStringException(ParseException):
+    def __init__(self):
+        super(NoStringException, self).__init__('no string to parse')
