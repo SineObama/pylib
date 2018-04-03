@@ -1,53 +1,56 @@
 # coding=utf-8
+'''自定义线程对象，方便停止线程和重复启动。'''
 
 import threading as _threading
 
 class StoppableThread(_threading.Thread):
     """Thread class with a stop() method. 
-    The thread process itself has to take a @parameter stop_event (provided by this class), 
-    and check regularly by stop_event.is_set()."""
+    The thread process itself has to take a parameter of type threading.Event (default name is 'stop_event', can be specified), 
+    and check regularly by stop_event.is_set() to stop itself.
+    The event object will be added to @parameter kwargs."""
 
-    def __init__(self, target, *args, **kwargs):
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None, event_name='stop_event'):
+        '''keep the same as threading.Thread.__init__'''
         self._stop_event = _threading.Event()
-        def _call(*args, **kwargs):
-            kwargs['stop_event'] = self._stop_event
-            return target(*args, **kwargs)
-        super(StoppableThread, self).__init__(target=_call, *args, **kwargs)
+        if kwargs == None:
+            kwargs = {}
+        kwargs[event_name] = self._stop_event
+        super(StoppableThread, self).__init__(group, target, name, args, kwargs, verbose)
         return
 
     def stop(self):
+        '''set the event.'''
         self._stop_event.set()
-        if self.is_alive():
-            self.join(2)
-            if self.is_alive():
-                print 'thread can not exit!'
         return
 
     def stopped(self):
+        '''whether the event is set'''
         return self._stop_event.is_set()
 
 class ReStartableThread(object):
-    """docstring for ReStartableThread"""
-    def __init__(self, target):
-        super(ReStartableThread, self).__init__()
-        self.target = target
-        self.thread = None
+    """方便同一个函数多次作为线程启动。参数同StoppableThread。
+    默认为守护线程。停止后会重新初始化，需要重新设置属性。"""
+    def __init__(self, *args, **kwargs):
+        self._args = args
+        self._kwargs = kwargs
+        self._thread = StoppableThread(*self._args, **self._kwargs)
+        self._thread.setDaemon(True)
         return
-
-    def getThread(self):
-        return self.thread
 
     def start(self):
-        self.stop()
-        self.thread = StoppableThread(self.target)
-        self.thread.setDaemon(True)
-        self.thread.start()
+        '''若线程存活或已停止，停止并重新初始化。'''
+        if self._thread.is_alive() or self._thread.stopped():
+            self.stop()
+        self._thread.start()
         return
-
-    def stopped(self):
-        return self.thread == None or self.thread.stopped()
 
     def stop(self):
-        if not self.stopped():
-            self.thread.stop()
+        '''停止线程并重新初始化（创建新对象）。'''
+        if not self._thread.stopped():
+            self._thread.stop()
+        self._thread = StoppableThread(*self._args, **self._kwargs)
+        self._thread.setDaemon(True)
         return
+
+    def __getattr__(self, name):
+        return self._thread.__getattribute__(name)
