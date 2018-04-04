@@ -1,6 +1,12 @@
 
 # coding: utf-8
 
+'''
+模拟其他语言的线程同步锁（函数装饰器），和同步锁函数acquire和release。
+可以看作锁定key对象，也可以把key视作键，使用字符串等。
+key必须是hashable的，必须提供。
+'''
+
 import threading as _threading
 import weakref as _weakref
 
@@ -12,10 +18,8 @@ def _recycle(key):
 
 def synchronized(key):
     '''
-    函数装饰器（key值对应的线程同步锁）。
-    key必须是hashable。
+    线程同步锁（函数装饰器）。
     可以把操作对象本身当做key，也可以是字符串之类的……
-    将创建key的弱引用。
     '''
     try:
         _key = _weakref.ref(key)
@@ -23,7 +27,7 @@ def synchronized(key):
             _key = _weakref.ref(key, _recycle)
             _dict[_key] = _threading.Lock()
         lock = _dict[_key]
-    except Exception, e:
+    except TypeError, e: # 不可创建弱引用（字符串等）
         if not _dict.has_key(key):
             _dict[key] = _threading.Lock()
         lock = _dict[key]
