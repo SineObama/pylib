@@ -117,7 +117,7 @@ def addMainPage():
                 return -1
             # edit time
             if order.startswith('w'):
-                index, remain = parseIndex(order[1:])
+                index, remain = parseInt(order[1:])
                 target, unused = parseDateTime(remain, now)
                 manager.editTime(manager.get(index), target)
                 return 1
