@@ -29,7 +29,8 @@ from parsing import *
 from mydatetime import getNow
 from entity import AlarmClock
 from exception import ClientException
-from data import data, warning
+from data import data
+import initUtil
 import listenThread
 import formatter
 import player
@@ -277,9 +278,8 @@ listenThread.off = pop
 
 # main loop
 try:
-    if warning and data['config']['warning_pause']:
-        print '\npress enter to continue'
-        raw_input()
+    if data['config']['warning_pause']:
+        initUtil.warning_pause()
     addMainPage()
     listenThread.start()
     while (1):

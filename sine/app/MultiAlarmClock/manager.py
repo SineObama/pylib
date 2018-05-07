@@ -5,7 +5,7 @@ import sine.myPickle as _pickle
 from sine.sync import synchronized
 from exception import ClockException as _ClockException
 from entity import AlarmClock as _AlarmClock
-from data import data as _data, warn as _warn
+from data import data as _data
 
 _filepath = _data['config']['datafile']
 _day = datetime.timedelta(1)
@@ -17,8 +17,8 @@ def _init():
     import sys
     try:
         _data['clocks'] = _pickle.load(_filepath, [])
-    except Exception, e:
-        print 'load from _data file', _filepath, 'failed:', repr(e)
+    except Exception, e: # 不包括找不到文件
+        print 'load data from file', _filepath, 'failed.', e
         sys.exit(1)
 
     # 只更新过期的星期重复闹钟
@@ -31,11 +31,17 @@ def _init():
     # 检查音频文件是否存在
     from player import assertLegal
     from exception import ClientException
+    from initUtil import warn
     for clock in _data['clocks']:
         try:
             assertLegal(clock['sound'])
         except ClientException, e:
-            _warn('illeagal sound \'' + clock['sound'] + '\' of', clock)
+            warn('illeagal sound \'' + clock['sound'] + '\' of', clock)
+    try:
+        assertLegal(_data['config']['default_sound'])
+    except ClientException, e:
+        warn('default sound illeagal, will use default beep.', e)
+        _data['config']['default_sound'] = 'default'
 
 def _getNextFromWeekday(now, time, repeat):
     '''为星期重复闹钟选择下一个有效时间。
