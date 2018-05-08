@@ -1,6 +1,6 @@
 # coding=utf-8
 
-import datetime as _datetime
+import datetime
 from data import data as _data
 
 # 闹钟实体
@@ -20,7 +20,7 @@ class AlarmClock(dict):
     def __init__(self, time, msg, repeat=None):
         self['time'] = time
         self['expired'] = False
-        self['remindAhead'] = _datetime.timedelta(0, _data['config']['default_remindAhead'])
+        self['remindAhead'] = datetime.timedelta(0, _data['config']['default_remindAhead'])
         self['remindTime'] = time - self['remindAhead']
         self['msg'] = msg
         self['repeat'] = repeat
@@ -53,3 +53,22 @@ class AlarmClock(dict):
         self['time'] = time
         self['remindTime'] = time - self['remindAhead']
         self['expired'] = False
+
+    @staticmethod
+    def default(obj):
+        if isinstance(obj, datetime.datetime):
+            return obj.strftime('%Y-%m-%d %H:%M:%S.%f')
+        else:
+            return repr(obj)
+
+    @staticmethod
+    def object_hook(dic):
+        clock = AlarmClock(datetime.datetime.now(), '')
+        for (k, v) in dic.items():
+            clock[k] = v.encode('unicode-escape').decode('string_escape') if isinstance(v, unicode) else v
+        clock['remindAhead'] = eval(clock['remindAhead'])
+        clock['remindTime'] = datetime.datetime.strptime(clock['remindTime'], '%Y-%m-%d %H:%M:%S.%f')
+        clock['time'] = datetime.datetime.strptime(clock['time'], '%Y-%m-%d %H:%M:%S.%f')
+        if type(clock['repeat']) == str and clock['repeat'].startswith('datetime'):
+            clock['repeat'] = eval(clock['repeat'])
+        return clock

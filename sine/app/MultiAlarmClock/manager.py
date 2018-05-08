@@ -1,24 +1,25 @@
 # coding=utf-8
 
+import json
 from mydatetime import *
-import sine.myPickle as _pickle
 from sine.sync import synchronized
 from exception import ClockException as _ClockException
 from entity import AlarmClock as _AlarmClock
 from data import data as _data
 
-_filepath = _data['config']['datafile']
+_data_filepath = _data['location'].join(_data['config']['datafile'])
 _day = datetime.timedelta(1)
 _everyday = '1234567'
 _sort = lambda x:(x['time'] if x['on'] else datetime.datetime.max)
 
 @synchronized('clocks')
 def _init():
-    import sys
     try:
-        _data['clocks'] = _pickle.load(_filepath, [])
+        with open(_data_filepath, 'r') as file:
+            _data['clocks'] = json.load(file, object_hook=_AlarmClock.object_hook, encoding='Latin-1')
     except Exception, e: # 不包括找不到文件
-        print 'load data from file', _filepath, 'failed.', e
+        print 'load data from file', _data_filepath, 'failed.', e
+        import sys
         sys.exit(1)
 
     # 只更新过期的星期重复闹钟
@@ -53,7 +54,8 @@ def _getNextFromWeekday(now, time, repeat):
 
 @synchronized('clocks')
 def save():
-    _pickle.dump(_filepath, _data['clocks'])
+    with open(_data_filepath, 'w') as file:
+        json.dump(_data['clocks'], file, default=_AlarmClock.default, ensure_ascii=False)
     return
 
 @synchronized('clocks')

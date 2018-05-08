@@ -33,6 +33,7 @@ def _init():
             time.sleep(last)
         return __func_sleep
 
+    import data
     from initUtil import warn
     import sine.propertiesReader as reader
 
@@ -41,7 +42,7 @@ def _init():
     default_pattern = [(600,50),(200,),(600,50),(300,)]
     lines = []
     try:
-        lines = reader.readAsList(beep_filename)
+        lines = reader.readAsList(data.data['location'].join(beep_filename))
     except Exception, e:
         warn('load beep pattern from file', beep_filename, 'failed, will use default value.', e)
         beep_pattern = default_pattern

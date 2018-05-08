@@ -9,14 +9,17 @@ data = {}
 
 def _init():
     import sine.propertiesReader as reader
+    from sine.path import Path
     from initUtil import warn
 
+    location = Path(__file__).join('..')
+    data['location'] = location
     # 从文件读入全局配置，暂时保存为字符串
     conf_filename = 'clock.conf'
     allMiss = False
     config = {}
     try:
-        config = reader.readAsDict(conf_filename)
+        config = reader.readAsDict(location.join(conf_filename))
     except Exception, e:
         warn('load config from file', conf_filename, 'failed, will use default value.', e)
         allMiss = True
@@ -57,7 +60,7 @@ def _init():
     # 读入日期和时间格式配置
     format_filename = 'time.conf'
     try:
-        config = reader.readAsList(format_filename)
+        config = reader.readAsList(location.join(format_filename))
         for i, (k, v) in enumerate(config):
             config[i] = (k, v.split(','))
     except Exception, e:
@@ -72,7 +75,7 @@ def _init():
 
     format_filename = 'date.conf'
     try:
-        config = reader.readAsList(format_filename)
+        config = reader.readAsList(location.join(format_filename))
         for i, (k, v) in enumerate(config):
             config[i] = (k, v.split(','))
     except Exception, e:
