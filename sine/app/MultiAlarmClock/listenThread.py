@@ -6,6 +6,7 @@
 '''
 
 from data import data as _data
+from initUtil import warn as _warn
 config = _data['config']
 
 lastTime = 30
@@ -73,7 +74,10 @@ try:
         from sine.api import FlashWindow as _FlashWindow
         _taskbarThread = _ReStartableThread(target=_taskbar)
 except ImportError, e:
-    raise e#todo
+    _warn('taskbar flashing not supported.', e)
+finally:
+    if '_taskbarThread' not in locals():
+        _taskbarThread = _ReStartableThread(target=None)
 
 
 tokens = config['screen_flash_mode']

@@ -1,24 +1,30 @@
 # coding=utf-8
 
+import json
 from mydatetime import *
-import sine.myPickle as _pickle
 from sine.sync import synchronized
 from exception import ClockException as _ClockException
 from entity import AlarmClock as _AlarmClock
-from data import data as _data, warn as _warn
+from data import data as _data
 
-_filepath = _data['config']['datafile']
+_data_filepath = _data['location'].join(_data['config']['datafile'])
 _day = datetime.timedelta(1)
 _everyday = '1234567'
 _sort = lambda x:(x['time'] if x['on'] else datetime.datetime.max)
 
 @synchronized('clocks')
 def _init():
-    import sys
+    import os
+    # 读取数据文件，忽略文件不存在的情况
     try:
-        _data['clocks'] = _pickle.load(_filepath, [])
+        if os.path.exists(_data_filepath):
+            with open(_data_filepath, 'r') as file:
+                _data['clocks'] = json.load(file, object_hook=_AlarmClock.object_hook, encoding='Latin-1')
+        else:
+            _data['clocks'] = []
     except Exception, e:
-        print 'load from _data file', _filepath, 'failed:', repr(e)
+        print 'load data from file', _data_filepath, 'failed.', e
+        import sys
         sys.exit(1)
 
     # 只更新过期的星期重复闹钟
@@ -31,11 +37,17 @@ def _init():
     # 检查音频文件是否存在
     from player import assertLegal
     from exception import ClientException
+    from initUtil import warn
     for clock in _data['clocks']:
         try:
             assertLegal(clock['sound'])
         except ClientException, e:
-            _warn('illeagal sound \'' + clock['sound'] + '\' of', clock)
+            warn('illeagal sound \'' + clock['sound'] + '\' of', clock)
+    try:
+        assertLegal(_data['config']['default_sound'])
+    except ClientException, e:
+        warn('default sound illeagal, will use default beep.', e)
+        _data['config']['default_sound'] = 'default'
 
 def _getNextFromWeekday(now, time, repeat):
     '''为星期重复闹钟选择下一个有效时间。
@@ -47,7 +59,8 @@ def _getNextFromWeekday(now, time, repeat):
 
 @synchronized('clocks')
 def save():
-    _pickle.dump(_filepath, _data['clocks'])
+    with open(_data_filepath, 'w') as file:
+        json.dump(_data['clocks'], file, default=_AlarmClock.default, ensure_ascii=False)
     return
 
 @synchronized('clocks')
