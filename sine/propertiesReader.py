@@ -1,6 +1,7 @@
 # coding=utf-8
 
 def readAsDict(path):
+    '''读取为str类型的字典，value可为空，不为None'''
     f = open(path, 'rb')
     kv = {}
     for line in f:
@@ -13,6 +14,7 @@ def readAsDict(path):
     return kv
 
 def readAsList(path):
+    '''根据顺序的需求，读取为str类型的双元组列表，第二个值可为空，不为None'''
     f = open(path, 'rb')
     l = []
     for line in f:
