@@ -12,11 +12,3 @@ def deleteAllModules():
             del sys.modules[i]
 
 deleteAllModules()
-
-import decorator
-import helpers
-import api
-import threads
-import myPickle
-import sync
-import app
