@@ -154,7 +154,7 @@ def cancel(clock):
         clock['expired'] = False
     else:
         if clock.isWeekly():
-            nexttime = _getNextFromWeekday(clock['time'], clock['time'], clock['repeat'])
+            nexttime = _getNextFromWeekday(clock['time'] if clock['time'] > now else now, clock['time'], clock['repeat'])
         else:
             nexttime = now + clock['repeat']
         clock.resetTime(nexttime)
