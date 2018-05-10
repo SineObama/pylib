@@ -52,7 +52,7 @@ def _init():
     else:
         for (key, default, converter) in default_config:
             if not config.has_key(key):
-                warn('missing config \'' + key + '\', will use default value \'' + str(default) + '\'')
+                warn('missing config \'' + key + '\', will use default value \'' + str(default) + '\'.')
                 config[key] = default
             elif converter:
                 try:

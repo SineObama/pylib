@@ -17,7 +17,7 @@ def _init():
     import os
     # 读取数据文件，忽略文件不存在的情况
     try:
-        if os.path.exists(_data_filepath):
+        if os.path.isfile(_data_filepath):
             with open(_data_filepath, 'r') as file:
                 _data['clocks'] = json.load(file, object_hook=_AlarmClock.object_hook, encoding='Latin-1')
         else:
@@ -30,7 +30,7 @@ def _init():
     # 只更新过期的星期重复闹钟
     now = getNow()
     for clock in _data['clocks']:
-        if clock['time'] < now and type(clock['repeat']) == str:
+        if clock['time'] < now and clock.isWeekly():
             clock.resetTime(_getNextFromWeekday(now, clock['time'], clock['repeat']))
     _data['clocks'].sort(key=_sort)
 
@@ -42,7 +42,7 @@ def _init():
         try:
             assertLegal(clock['sound'])
         except ClientException, e:
-            warn('illeagal sound \'' + clock['sound'] + '\' of', clock)
+            warn('illeagal sound \'' + clock['sound'] + '\' of', clock, '.')
     try:
         assertLegal(_data['config']['default_sound'])
     except ClientException, e:
@@ -120,9 +120,9 @@ def editTime(clock, date_time):
     会开启闹钟。'''
     now = getNow()
     if date_time <= now:
-        if not clock['repeat']:
+        if not clock.isRepeat():
             date_time = _getNextFromWeekday(now, date_time, _everyday)
-        if type(clock['repeat']) == str:
+        if clock.isWeekly():
             date_time = _getNextFromWeekday(now, date_time, clock['repeat'])
     clock.resetTime(date_time)
     clock['on'] = True
@@ -149,11 +149,11 @@ def cancel(clock):
         raise _ClockException('the clock is off, can not cancel')
     
     # cancel it
-    if not clock['repeat']:
+    if not clock.isRepeat():
         clock['on'] = False
         clock['expired'] = False
     else:
-        if type(clock['repeat']) == str:
+        if clock.isWeekly():
             nexttime = _getNextFromWeekday(clock['time'], clock['time'], clock['repeat'])
         else:
             nexttime = now + clock['repeat']
@@ -188,8 +188,8 @@ def switch(indexs):
         clock['on'] = not clock['on']
         clock['expired'] = False
         if clock['on'] and clock['time'] < now:
-            if clock['repeat']:
-                if type(clock['repeat']) == str:
+            if clock.isRepeat():
+                if clock.isWeekly():
                     clock.resetTime(_getNextFromWeekday(now, clock['time'], clock['repeat']))
                 else:
                     clock.resetTime(now + clock['repeat'])

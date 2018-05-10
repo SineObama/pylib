@@ -123,9 +123,9 @@ def legal(name):
     import os
     if name in _extraLegal:
         return True
-    if os.path.exists(name):
+    if os.path.isfile(name):
         return True
-    if os.path.exists(name + '.wav'):
+    if os.path.isfile(name + '.wav'):
         return True
     return False
 

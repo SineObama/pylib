@@ -1,6 +1,7 @@
 # coding=utf-8
 
 import datetime
+from parsing import zero
 from data import data as _data
 
 # 闹钟实体
@@ -54,6 +55,22 @@ class AlarmClock(dict):
         self['remindTime'] = time - self['remindAhead']
         self['expired'] = False
 
+    def isRepeat(self):
+        '''是否重复的闹钟'''
+        return type(self['repeat']) != None
+
+    def isWeekly(self):
+        '''是否星期重复'''
+        return type(self['repeat']) == str
+
+    def repeatStr(self):
+        if not self.isRepeat():
+            return ''
+        if self.isWeekly():
+            return self['repeat']
+        else:
+            return (zero + self['repeat']).strftime('%H:%M:%S')
+
     @staticmethod
     def default(obj):
         if isinstance(obj, datetime.datetime):
@@ -69,6 +86,6 @@ class AlarmClock(dict):
         clock['remindAhead'] = eval(clock['remindAhead'])
         clock['remindTime'] = datetime.datetime.strptime(clock['remindTime'], '%Y-%m-%d %H:%M:%S.%f')
         clock['time'] = datetime.datetime.strptime(clock['time'], '%Y-%m-%d %H:%M:%S.%f')
-        if type(clock['repeat']) == str and clock['repeat'].startswith('datetime'):
+        if clock.isWeekly() and clock['repeat'].startswith('datetime'):
             clock['repeat'] = eval(clock['repeat'])
         return clock
