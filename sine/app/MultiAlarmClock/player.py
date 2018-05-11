@@ -99,7 +99,7 @@ def play(name):
         _alarmThread.stop()
         _winsound.PlaySound(None, _winsound.SND_PURGE)
     if name != None:
-        if name == _beep or not legal(name):
+        if name == _beep or not isLegal(name):
             _alarmThread.start()
         else:
             # 播放系统声音，或用绝对路径播放wav音频（后者优先）
@@ -118,7 +118,7 @@ _beep,
 'SystemQuestion',
 'SystemDefault']
 
-def legal(name):
+def isLegal(name):
     '''检查音频文件是否存在或为以上合法系统值。'''
     import os
     if name in _extraLegal:
@@ -130,5 +130,5 @@ def legal(name):
     return False
 
 def assertLegal(name):
-    if not legal(name):
+    if not isLegal(name):
         raise _ClientException('wav file \''+name+'\' or \''+name+'.wav\' not exists or not system sound')

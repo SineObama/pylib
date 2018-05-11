@@ -9,12 +9,12 @@ sys.path.append(location)
 
 import json
 import sine.myPickle as _pickle
-import entity
+from entity import *
 
 src = raw_input('enter source data file with postfix binv3:')
 if src == '':
     src ='clocks.binv3'
-dst = raw_input('enter new json file name:')
+dst = raw_input('enter new data file name:')
 if dst == '':
     dst ='clocks.txt'
 
@@ -29,13 +29,22 @@ try:
             raise MyException()
     clocks = _pickle.load(location.join(src), [])
     with open(dst_path, 'w') as file:
-        json.dump(clocks, file, default=entity.AlarmClock.default, ensure_ascii=False)
+        for clock in clocks:
+            if clock['repeat'] == None:
+                s = 'WeeklyClock'
+                clock['weekdays'] = '       '
+                clock.pop('repeat')
+            elif type(clock['repeat']) == str:
+                s = 'WeeklyClock'
+                clock['weekdays'] = clock.pop('repeat')
+            else:
+                s = 'PeriodClock'
+                clock['period'] = clock.pop('repeat')
+            file.write(s + '(' + dict.__repr__(clock) + ')')
+            file.write('\n')
     print 'data convert finish.'
 except MyException, e:
     print 'convert canceled.', e
-except Exception, e:
-    import traceback
-    traceback.print_exc()
 finally:
     print 'press enter to exit'
     raw_input()

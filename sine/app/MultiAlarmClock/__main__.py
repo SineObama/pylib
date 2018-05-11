@@ -12,9 +12,9 @@ from sine.sync import synchronized
 from sine.helpers import cls
 # 本地依赖
 from parsing import *
-from mydatetime import getNow
-from entity import AlarmClock
-from exception import ClientException
+from mydatetime import *
+from entity import *
+from exception import ClientException, NoStringException
 from data import data
 import initUtil
 import listenThread
@@ -80,8 +80,8 @@ def addMainPage():
         return
     
     def printAndSave():
+        manager.resortAndSave()
         clsAndPrintList()
-        manager.save()
 
     def main(order):
         now = getNow()
@@ -104,7 +104,7 @@ def addMainPage():
             if order.startswith('w'):
                 index, remain = parseInt(order[1:])
                 target, unused = parseDateTime(remain, now)
-                manager.editTime(manager.get(index), target)
+                manager.get(index).editTime(target)
                 return 1
             # cancel alarm
             if order.startswith('a'):
@@ -122,7 +122,7 @@ def addMainPage():
                 manager.remove(indexs)
                 return 1
             
-            # $dtime ($msg)        #普通闹钟
+            # $dtime ($msg)        #一次性闹钟
             # $dtime w $wday ($msg)        #星期重复闹钟
             # $dtime r $dtime ($msg)        #周期重复闹钟
             target, remain = parseDateTime(order, now)
@@ -130,15 +130,18 @@ def addMainPage():
                 char, remain2 = parseString(remain)
                 if char == 'w':
                     weekdays, msg = parseString(remain2)
-                    manager.addRepeatWeekday(target, weekdays, msg)
+                    manager.add(WeeklyClock({'time':target,'weekdays':weekdays,'msg':msg}))
                     return 1
                 if char == 'r':
                     period, msg = parseTime(remain2, zero)
-                    manager.addRepeatPeriod(target, period - zero, msg)
+                    period -= zero
+                    manager.add(PeriodClock({'time':target,'period':period,'msg':msg}))
                     return 1
-            except Exception, e:
+            except NoStringException, e:
                 pass
-            manager.addOnce(target, remain)
+            if target <= now:
+                target = getNextFromWeekday(now, target, everyday)
+            manager.add(OnceClock({'time':target}))
             return 1
         except ClientException as e:
             print e
@@ -159,13 +162,13 @@ def addEditPage(clock):
         string += 'next time: %s\n' % str(clock['time'])
         string += 'remind ahead: %s\n' % str(clock['remindAhead'])
         string += 'repeat: '
-        if not clock.isRepeat():
+        if isinstance(clock, OnceClock):
             string += 'No'
         else:
-            if clock.isWeekly():
-                string += 'on weekday \'' + clock['repeat'] + '\''
+            if isinstance(clock, WeeklyClock):
+                string += 'on weekday \'' + clock['weekdays'] + '\''
             else:
-                string += 'every ' + (zero + clock['repeat']).strftime('%H:%M:%S')
+                string += 'every ' + (zero + clock['period']).strftime('%H:%M:%S')
         string += '\n'
         string += 'message: %s\n' % clock['msg']
         string += 'sound: %s\n' % clock['sound']
@@ -173,8 +176,8 @@ def addEditPage(clock):
         return
     
     def printAndSave():
+        manager.resortAndSave()
         clsAndPrintClock()
-        manager.save()
     
     def editPage(order):
         try: # catch parse exception
@@ -186,11 +189,14 @@ def addEditPage(clock):
             # edit time
             if order.startswith('w'):
                 target, unused = parseDateTime(order[1:], getNow())
-                manager.editTime(clock, target)
+                clock.editTime(target)
                 return 1
             # edit remind ahead
             if order.startswith('a'):
-                manager.editRemindAhead(clock, parseInt(order[1:])[0])
+                ahead = parseInt(order[1:])[0]
+                if ahead < 0:
+                    raise ClientException('can\'t ahead negative')
+                clock.editRemindAhead(ahead)
                 return 1
             # edit message
             if order.startswith('m'):
@@ -198,13 +204,14 @@ def addEditPage(clock):
                 return 1
             # edit repeat time
             if order.startswith('r'):
-                if not clock.isRepeat():
-                    raise ClientException('this is not repeat clock')
-                if clock.isWeekly():
-                    manager.editWeekdays(clock, parseString(order[1:])[0])
+                if isinstance(clock, OnceClock):
+                    raise ClientException('this is once clock')
+                if isinstance(clock, WeeklyClock):
+                    clock.editWeekdays(parseString(order[1:])[0])
                 else:
                     period, unused = parseTime(order[1:], zero)
-                    manager.editPeriod(clock, period - zero)
+                    clock.editPeriod(period - zero)
+                    clock.resetTime(getNow() + clock['period'])
                 return 1
             # edit sound
             if order.startswith('s'):
@@ -244,7 +251,7 @@ def addAlarmPage():
         return -1
     
     page = Page(alarmPage, lambda :None)
-    page[1] = manager.save
+    page[1] = manager.resortAndSave
     append(page)
 
 
