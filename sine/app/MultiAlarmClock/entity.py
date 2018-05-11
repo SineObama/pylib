@@ -21,6 +21,8 @@ class AlarmClock(dict):
     def __init__(self, dic):
         '''必须含义time字段'''
         self.update(dic)
+        if not self.has_key('time'):
+            raise ClockException('internal error, no time')
         self.setdefault('msg', '')
         self.setdefault('expired', False)
         self.setdefault('remindAhead', datetime.timedelta(0, data['config']['default_remindAhead']))
@@ -88,6 +90,8 @@ class WeeklyClock(AlarmClock):
     '''星期重复闹钟，不重复时用完自动关闭'''
     def __init__(self, dic):
         AlarmClock.__init__(self, dic)
+        if not self.has_key('weekdays'):
+            raise ClockException('internal error, no weekdays')
         self.editWeekdays(self['weekdays'])
         # 更新过期闹钟
         now = getNow()
@@ -140,6 +144,8 @@ class PeriodClock(AlarmClock):
        period:datetime.timedelta 比如1小时（冷却时间）'''
     def __init__(self, dic):
         AlarmClock.__init__(self, dic)
+        if not self.has_key('period'):
+            raise ClockException('internal error, no period')
         self.editPeriod(dic['period'])
 
     def editPeriod(self, period):

@@ -124,21 +124,22 @@ class MainPage(Page):
             # $dtime r $dtime ($msg)        #周期重复闹钟
             target, remain = parseDateTime(order, now)
             try:
+                char = ''
                 char, remain2 = parseString(remain)
-                if char == 'w':
-                    weekdays, msg = parseString(remain2)
-                    manager.add(WeeklyClock({'time':target,'weekdays':weekdays,'msg':msg}))
-                    return 1
-                if char == 'r':
-                    period, msg = parseTime(remain2, zero)
-                    period -= zero
-                    manager.add(PeriodClock({'time':target,'period':period,'msg':msg}))
-                    return 1
             except NoStringException, e:
                 pass
+            if char == 'w':
+                weekdays, msg = parseString(remain2)
+                manager.add(WeeklyClock({'time':target,'weekdays':weekdays,'msg':msg}))
+                return 1
+            if char == 'r':
+                period, msg = parseDateAndTime(remain2, zero)
+                period -= zero
+                manager.add(PeriodClock({'time':target,'period':period,'msg':msg}))
+                return 1
             if target <= now:
                 target = getNextFromWeekday(now, target, everyday)
-            manager.add(OnceClock({'time':target}))
+            manager.add(OnceClock({'time':target,'msg':remain}))
             return 1
         except ClientException as e:
             print e
@@ -208,7 +209,7 @@ class EditPage(Page):
                     clock.editWeekdays(parseString(order[1:])[0])
                     clock.resetTime(getNextFromWeekday(getNow(), clock['time'], clock['weekdays']))
                 else:
-                    period, unused = parseTime(order[1:], zero)
+                    period, unused = parseDateAndTime(order[1:], zero)
                     clock.editPeriod(period - zero)
                     clock.resetTime(getNow() + clock['period'])
                 return 1
