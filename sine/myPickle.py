@@ -8,9 +8,8 @@ def load(path, defalut=None):
     @parameter default 文件不存在时默认的返回值
     '''
     try:
-        f = open(path, 'rb')
-        rtn = _pickle.load(f)
-        f.close()
+        with open(path, 'rb') as f:
+            rtn = _pickle.load(f)
     except IOError, e:
         if e.errno != 2: # IOError: [Errno 2] No such file or directory: ''
             raise e
@@ -22,6 +21,5 @@ def dump(path, obj):
     @parameter path 文件路径
     @parameter obj 保存的对象
     '''
-    f = open(path, 'wb')
-    _pickle.dump(obj, f)
-    f.close()
+    with open(path, 'wb') as f:
+        _pickle.dump(obj, f)
