@@ -1,9 +1,5 @@
 # coding: utf-8
 
-
-# In[ ]:
-
-
 # 外部依赖
 import sys
 import datetime
@@ -20,9 +16,6 @@ import initUtil
 import listenThread
 import formatter
 import player
-
-
-# In[ ]:
 
 
 # 栈管理“页面”
@@ -54,9 +47,6 @@ def pop():
     if len(stack):
         stack[-1].reprint()
     return rtn
-
-
-# In[ ]:
 
 
 remindDelay = datetime.timedelta(0, data['config']['alarm_interval'])
@@ -259,16 +249,10 @@ class AlarmPage(Page):
         return -1
 
 
-# In[ ]:
-
-
 listenThread.remindDelay = remindDelay
 listenThread.lastTime = data['config']['alarm_last']
 listenThread.on = lambda :append(AlarmPage())
 listenThread.off = pop
-
-
-# In[ ]:
 
 
 try:
