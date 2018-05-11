@@ -35,15 +35,11 @@ def _init():
         warn('default sound illeagal, will use default beep.', e)
         data['config']['default_sound'] = 'default'
 
-@synchronized('clocks')
 def getReminds():
     '''供Output提示'''
-    return _getReminds(data['clocks']);
-
-def _getReminds(clocks):
     reminds = []
     now = getNow()
-    for clock in clocks:
+    for clock in data['clocks']:
         if clock.checkRemind(now):
             reminds.append(clock)
     return reminds
@@ -144,7 +140,7 @@ def remove(indexs):
 def later(time):
     '''存在提醒闹钟：设置他们的提醒时间；
     不存在：设置所有到期闹钟的提醒时间'''
-    reminds = _getReminds(data['clocks'])
+    reminds = getReminds()
     if len(reminds):
         for clock in reminds:
             clock['remindTime'] = time

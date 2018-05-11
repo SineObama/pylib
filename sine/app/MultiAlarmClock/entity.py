@@ -21,8 +21,10 @@ class AlarmClock(dict):
     def __init__(self, dic):
         '''必须含义time字段'''
         self.update(dic)
+        self.setdefault('msg', '')
         self.setdefault('expired', False)
         self.setdefault('remindAhead', datetime.timedelta(0, data['config']['default_remindAhead']))
+        self.setdefault('remindTime', dic['time'] - self['remindAhead'])
         self.setdefault('on', True)
         self.setdefault('sound', data['config']['default_sound'])
     
@@ -86,13 +88,14 @@ class WeeklyClock(AlarmClock):
     '''星期重复闹钟，不重复时用完自动关闭'''
     def __init__(self, dic):
         AlarmClock.__init__(self, dic)
+        self.editWeekdays(self['weekdays'])
         # 更新过期闹钟
         now = getNow()
         if self['on'] and self['time'] < now:
             self.resetTime(getNextFromWeekday(now, self['time'], self['weekdays']))
 
     def editWeekdays(self, weekdays):
-        '''修改星期，重新计算下一次闹钟'''
+        '''修改星期，对输入进行格式化'''
         if weekdays == None:
             weekdays = ''
         d = {}
@@ -103,7 +106,6 @@ class WeeklyClock(AlarmClock):
         weekdays = ''
         for i in everyday:
             weekdays += i if d[i] else ' '
-        self.resetTime(getNextFromWeekday(getNow(), self['time'], weekdays))
         self['weekdays'] = weekdays
 
     def repeatStr(self):
@@ -114,7 +116,7 @@ class WeeklyClock(AlarmClock):
         now = getNow()
         if date_time <= now:
             date_time = getNextFromWeekday(now, date_time, self['weekdays'])
-        AlarmClock.editTime(date_time)
+        AlarmClock.editTime(self, date_time)
 
     def cancel(self):
         '''取消下一个提醒'''
@@ -141,7 +143,7 @@ class PeriodClock(AlarmClock):
         self.editPeriod(dic['period'])
 
     def editPeriod(self, period):
-        '''修改周期，不重新计算'''
+        '''修改周期'''
         if not period:
             raise ClockException('period can not be 0')
         self['period'] = period

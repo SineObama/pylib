@@ -15,16 +15,16 @@ play(None)停止
 'SystemDefault'
 '''
 
-import winsound as _winsound
-from sine.threads import ReStartableThread as _ReStartableThread
-from exception import ClientException as _ClientException
+import winsound
+from sine.threads import ReStartableThread
+from exception import ClientException
 
 _list = []
 
 def _init():
     def create_beep(Hz, last):
         def __func_bepp():
-            _winsound.Beep(Hz, last)
+            winsound.Beep(Hz, last)
         return __func_bepp
 
     import time
@@ -55,17 +55,17 @@ def _init():
                 if len(array) > 1:
                     frequency = int(array[0].strip())
                     if (frequency < 37 or frequency > 32767):
-                        raise _ClientException('frequency must be in 37 thru 32767, but meet ' + frequency)
+                        raise ClientException('frequency must be in 37 thru 32767, but meet ' + frequency)
                     duration = int(array[1].strip())
                     if (duration <= 0):
-                        raise _ClientException('duration must be positive, but meet ' + duration)
+                        raise ClientException('duration must be positive, but meet ' + duration)
                     if (duration > 10000):
-                        raise _ClientException('duration is too big, more than 10000, but meet ' + duration)
+                        raise ClientException('duration is too big, more than 10000, but meet ' + duration)
                     beep_pattern.append((frequency, duration))
                 else:
                     last = int(array[0].strip())
                     if (last <= 0):
-                        raise _ClientException('last must be positive, but meet ' + last)
+                        raise ClientException('last must be positive, but meet ' + last)
                     beep_pattern.append((last,))
     except Exception, e:
         warn('parse beep pattern failed, will use default value.', e)
@@ -89,7 +89,7 @@ def _alarm(stop_event):
 
 _name = None # 必然非空''
 _beep = 'default'
-_alarmThread = _ReStartableThread(target=_alarm)
+_alarmThread = ReStartableThread(target=_alarm)
 
 def play(name):
     global _name
@@ -97,14 +97,14 @@ def play(name):
         return
     if _name != None: # 正在播则停止当前beep或者音乐
         _alarmThread.stop()
-        _winsound.PlaySound(None, _winsound.SND_PURGE)
+        winsound.PlaySound(None, winsound.SND_PURGE)
     if name != None:
         if name == _beep or not isLegal(name):
             _alarmThread.start()
         else:
             # 播放系统声音，或用绝对路径播放wav音频（后者优先）
-            _winsound.PlaySound(name, _winsound.SND_ALIAS | _winsound.SND_ASYNC | _winsound.SND_LOOP)
-            _winsound.PlaySound(name, _winsound.SND_FILENAME | _winsound.SND_ASYNC | _winsound.SND_LOOP)
+            winsound.PlaySound(name, winsound.SND_ALIAS | winsound.SND_ASYNC | winsound.SND_LOOP)
+            winsound.PlaySound(name, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP)
     _name = name
     return
 
@@ -131,4 +131,4 @@ def isLegal(name):
 
 def assertLegal(name):
     if not isLegal(name):
-        raise _ClientException('wav file \''+name+'\' or \''+name+'.wav\' not exists or not system sound')
+        raise ClientException('wav file \''+name+'\' or \''+name+'.wav\' not exists or not system sound')

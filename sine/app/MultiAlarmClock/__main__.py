@@ -27,20 +27,21 @@ import player
 
 # 栈管理“页面”
 # 每个页面有2个函数：
-# do接受指令，返回回调函数编号（大于0）
+# do接受指令
 # reprint输出页面（清屏）
+# 具体实现中，dodo返回回调函数编号（大于0），0则退出页面，-1可表示无操作
 class Page(dict):
-    def __init__(self, do, reprint):
-        self._do = do
-        self._reprint = reprint
-        return
     def do(self, order):
-        rtn = self._do(order)
+        rtn = self.dodo(order)
         if rtn > 0:
             return self[rtn]()
+        if rtn == 0:
+            pop()
         return rtn
     def reprint(self):
-        return self._reprint()
+        pass
+    def dodo(self):
+        return 0
 stack = []
 @synchronized('stack')
 def append(page):
@@ -59,31 +60,38 @@ def pop():
 
 
 remindDelay = datetime.timedelta(0, data['config']['alarm_interval'])
+fmt = formatter.create(data['config'], data['config']['format'])
 
 # 主页面：闹钟列表
 
-def addMainPage():
+class MainPage(Page):
 
-    fmt = formatter.create(data['config'], data['config']['format'])
+    def __init__(self):
+        self[1] = self.printAndSave
 
     @synchronized('clocks')
-    def clsAndPrintList():
+    def reprint(self):
         cls()
         now = getNow()
         if len(data['clocks']):
+            isToday = True
+            today = datetime.datetime.date(now)
             string = 'alarm clocks:\n'
             for i, clock in enumerate(data['clocks']):
+                if isToday and datetime.datetime.date(clock['time']) > today:
+                    isToday = False
+                    string += '\n'
                 string += fmt(i+1, clock) + '\n'
         else:
             string = 'no clock\n'
         sys.stdout.write(string)
         return
     
-    def printAndSave():
+    def printAndSave(self):
         manager.resortAndSave()
-        clsAndPrintList()
+        self.reprint()
 
-    def main(order):
+    def dodo(self, order):
         now = getNow()
         try: # catch parse exception
             if len(order) == 0: # 'later' and clean screen
@@ -92,13 +100,12 @@ def addMainPage():
 
             order = order.strip()
             if order == 'q': # quit
-                pop()
                 return 0
 
             # edit clock in new page
             if order.startswith('e'):
                 index, unused = parseInt(order[1:], 0)
-                addEditPage(manager.get(index, True))
+                append(EditPage(manager.get(index, True)))
                 return -1
             # edit time
             if order.startswith('w'):
@@ -146,17 +153,18 @@ def addMainPage():
         except ClientException as e:
             print e
             return -1
-    
-    page = Page(main, clsAndPrintList)
-    page[1] = printAndSave
-    append(page)
 
 # 编辑页面
 
-def addEditPage(clock):
+class EditPage(Page):
+
+    def __init__(self, clock):
+        self.clock = clock
+        self[1] = self.printAndSave
     
-    def clsAndPrintClock():
+    def reprint(self):
         cls()
+        clock = self.clock
         string = ' - Edit - \n'
         string += '%3s\n' % ('ON' if clock['on'] else 'OFF')
         string += 'next time: %s\n' % str(clock['time'])
@@ -175,15 +183,15 @@ def addEditPage(clock):
         sys.stdout.write(string)
         return
     
-    def printAndSave():
+    def printAndSave(self):
         manager.resortAndSave()
-        clsAndPrintClock()
+        self.reprint()
     
-    def editPage(order):
+    def dodo(self, order):
+        clock = self.clock
         try: # catch parse exception
             order = order.strip()
             if order == 'q': # quit
-                pop()
                 return 0
 
             # edit time
@@ -208,6 +216,7 @@ def addEditPage(clock):
                     raise ClientException('this is once clock')
                 if isinstance(clock, WeeklyClock):
                     clock.editWeekdays(parseString(order[1:])[0])
+                    clock.resetTime(getNextFromWeekday(getNow(), clock['time'], clock['weekdays']))
                 else:
                     period, unused = parseTime(order[1:], zero)
                     clock.editPeriod(period - zero)
@@ -225,16 +234,15 @@ def addEditPage(clock):
         except ClientException as e:
             print e
             return -1
-    
-    page = Page(editPage, clsAndPrintClock)
-    page[1] = printAndSave
-    append(page)
 
 # 响铃页面
 
-def addAlarmPage():
+class AlarmPage(Page):
 
-    def alarmPage(order):
+    def __init__(self):
+        self[1] = manager.resortAndSave
+
+    def dodo(self, order):
         order = order.strip()
         now = getNow()
         if len(order) == 0: # 'later' and clean screen
@@ -249,10 +257,6 @@ def addAlarmPage():
             manager.switch([])
             return 1
         return -1
-    
-    page = Page(alarmPage, lambda :None)
-    page[1] = manager.resortAndSave
-    append(page)
 
 
 # In[ ]:
@@ -260,7 +264,7 @@ def addAlarmPage():
 
 listenThread.remindDelay = remindDelay
 listenThread.lastTime = data['config']['alarm_last']
-listenThread.on = addAlarmPage
+listenThread.on = lambda :append(AlarmPage())
 listenThread.off = pop
 
 
@@ -272,7 +276,7 @@ try:
     import manager
     if data['config']['warning_pause']:
         initUtil.warning_pause()
-    addMainPage()
+    append(MainPage())
     listenThread.start()
     while (1):
         order = raw_input()

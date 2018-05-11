@@ -5,9 +5,9 @@
 提供start和stop接口，可重复启动。
 '''
 
-from data import data as _data
-from initUtil import warn as _warn
-config = _data['config']
+from data import data
+from initUtil import warn
+config = data['config']
 
 lastTime = 30
 remindDelay = None
@@ -74,7 +74,7 @@ try:
         from sine.api import FlashWindow as _FlashWindow
         _taskbarThread = _ReStartableThread(target=_taskbar)
 except ImportError, e:
-    _warn('taskbar flashing not supported.', e)
+    warn('taskbar flashing not supported.', e)
 finally:
     if '_taskbarThread' not in locals():
         _taskbarThread = _ReStartableThread(target=None)
