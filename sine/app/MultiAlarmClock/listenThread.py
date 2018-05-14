@@ -65,13 +65,13 @@ def _taskbar(stop_event):
     while 1:
         if stop_event.is_set():
             break
-        _FlashWindow()
+        _flash()
         time.sleep(1)
     return
 
 try:
     if config['taskbar_flash']:
-        from sine.api import FlashWindow as _FlashWindow
+        from sine.flashWindow import flash as _flash
         _taskbarThread = _ReStartableThread(target=_taskbar)
 except ImportError, e:
     warn('taskbar flashing not supported.', e)
