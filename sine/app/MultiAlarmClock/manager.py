@@ -15,10 +15,9 @@ def _init():
     # 读取数据文件，忽略文件不存在的情况
     try:
         data['clocks'] = []
-        if os.path.isfile(_data_filepath):
-            with open(_data_filepath, 'r') as file:
-                for line in file:
-                    data['clocks'].append(eval(line))
+        with open(_data_filepath, 'a+') as file:
+            for line in file:
+                data['clocks'].append(eval(line))
     except Exception, e:
         print 'load data from file', _data_filepath, 'failed.', e
         import sys
