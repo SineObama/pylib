@@ -42,6 +42,7 @@ def _init():
     default_pattern = [(600,50),(200,),(600,50),(300,)]
     lines = []
     try:
+        data.useDefault(data.data['location'], beep_filename)
         lines = reader.readAsList(data.data['location'].join(beep_filename))
     except Exception, e:
         warn('load beep pattern from file', beep_filename, 'failed, will use default value.', e)

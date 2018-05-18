@@ -1,0 +1,43 @@
+# 在配置出现问题等情况，在刷新页面前暂停以供查看
+warning_pause=1
+
+##提醒设置
+# 任务栏闪烁
+taskbar_flash=1
+# 屏幕显示（闪烁）方式，多个数字均分1秒时长，0代表不显示，1显示，以实现闪烁效果
+screen_flash_mode=0111101111
+# 提醒（闹铃）持续时间
+alarm_last=30
+# 提醒间隔
+alarm_interval=300
+
+# 默认的提醒提前时间
+default_remindAhead=0
+# 创建闹钟时的默认铃声，本地铃声使用相对或绝对路径，可省略后缀名。此外，'default'表示播放beep音频；空表示无铃声；还可以用win32系统的几个注册表声音：
+# 'SystemAsterisk' Asterisk
+# 'SystemExclamation' Exclamation
+# 'SystemExit' Exit Windows
+# 'SystemHand' Critical Stop
+# 'SystemQuestion' Question
+# 'SystemDefault'
+default_sound=default
+
+# 闹钟列表格式
+# 使用datetime的格式, 一般用法:
+# 2017-12-25 13:01:59 Mon
+#   %Y-%m-%d %H:%M:%S  %a
+# 这里额外定义的格式都是以'%%'开头:
+# %%warn - 表示在到期状态的闹钟。字符串可在下面设置。
+# %%idx - 闹钟的序号。
+# %%state - 表示闹钟开关状态。字符串可在下面设置。
+# %%msg - 闹钟的内容。
+# %%rep - 重复的内容，星期或周期。
+# 可以像字符串格式化的方法使用，比如在中间加数字限定宽度，以实现对齐。
+format=%Y-%m-%d %H:%M:%S %%8rep %%3warn %%3idx %%3state %%msg
+# 提醒时的闪烁格式
+flash_format=%Y-%m-%d %H:%M:%S %%msg
+warn=!!!
+state.ON=ON
+state.OFF=OFF
+
+datafile=clocks.txt

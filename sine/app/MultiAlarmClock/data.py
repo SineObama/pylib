@@ -3,6 +3,9 @@
 全局数据。包括配置的读取和验证。
 '''
 
+import os.path as spath
+import shutil
+
 data = {}
 
 # 加载配置并检查。对于缺少的配置赋予默认值并暂停警告
@@ -20,11 +23,13 @@ def _init():
 
     location = Path(__file__).join('..')
     data['location'] = location
+
     # 从文件读入全局配置，暂时保存为字符串
     conf_filename = 'clock.conf'
     allMiss = False
     config = {}
     try:
+        useDefault(location, conf_filename)
         config = reader.readAsDict(location.join(conf_filename))
     except Exception, e:
         warn('load config from file', conf_filename, 'failed, will use default value.', e)
@@ -66,6 +71,7 @@ def _init():
     # 读入日期和时间格式配置
     format_filename = 'time.conf'
     try:
+        useDefault(location, format_filename)
         config = reader.readAsList(location.join(format_filename))
         for i, (k, v) in enumerate(config):
             config[i] = (k, v.split(','))
@@ -81,6 +87,7 @@ def _init():
 
     format_filename = 'date.conf'
     try:
+        useDefault(location, format_filename)
         config = reader.readAsList(location.join(format_filename))
         for i, (k, v) in enumerate(config):
             config[i] = (k, v.split(','))
@@ -90,5 +97,14 @@ def _init():
                   (   '%m/%d',        ['month', 'day']),
                   ('%y/%m/%d',['year', 'month', 'day'])]
     data['dateFormats'] = config
+
+def useDefault(location, filename):
+    '''配置文件不存在时尝试从默认文件复制一份'''
+    suffix = '.default'
+    filepath = location.join(filename)
+    if not spath.isfile(filepath):
+        defaultpath = location.join(filename + suffix)
+        if spath.isfile(defaultpath):
+            shutil.copyfile(defaultpath, filepath)
 
 _init()
