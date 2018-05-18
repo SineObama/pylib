@@ -1,20 +1,24 @@
 # coding=utf-8
 
-import cPickle as _pickle
+import cPickle
+import os.path
 
-def load(path, defalut=None):
+def loadOrDefault(path, defalut):
     '''
     @parameter path 文件路径
     @parameter default 文件不存在时默认的返回值
     '''
-    try:
+    if os.path.isfile(path):
         with open(path, 'rb') as f:
-            rtn = _pickle.load(f)
-    except IOError, e:
-        if e.errno != 2: # IOError: [Errno 2] No such file or directory: ''
-            raise e
-        rtn = defalut
-    return rtn
+            return cPickle.load(f)
+    return defalut
+
+def load(path):
+    '''
+    @parameter path 文件路径
+    '''
+    with open(path, 'rb') as f:
+        return cPickle.load(f)
 
 def dump(path, obj):
     '''
@@ -22,4 +26,4 @@ def dump(path, obj):
     @parameter obj 保存的对象
     '''
     with open(path, 'wb') as f:
-        _pickle.dump(obj, f)
+        return cPickle.dump(obj, f)

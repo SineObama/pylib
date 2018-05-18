@@ -7,27 +7,32 @@ from sine.path import Path
 location = Path(__file__).join('..').join('sine').join('app').join('MultiAlarmClock')
 sys.path.append(location)
 
-import json
-import sine.myPickle as _pickle
+import sine.myPickle as myPickle
 from entity import *
 
-src = raw_input('enter source data file with postfix binv3:')
-if src == '':
-    src ='clocks.binv3'
-dst = raw_input('enter new data file name:')
-if dst == '':
-    dst ='clocks.txt'
 
 class MyException(Exception):
     pass
 
 try:
+    src = raw_input('enter source data file with postfix binv3:')
+    if src == '':
+        src ='clocks.binv3'
+    src_path = location.join(src)
+    if not os.path.isfile(src_path):
+        print 'file not exists'
+        raise MyException()
+
+    dst = raw_input('enter new data file name:')
+    if dst == '':
+        dst ='clocks.txt'
     dst_path = location.join(dst)
     if os.path.isfile(dst_path):
         yn = raw_input('the output file exists, enter y to confirm replacement:')
         if yn.lower() != 'y':
             raise MyException()
-    clocks = _pickle.load(location.join(src), [])
+
+    clocks = myPickle.load(src_path)
     with open(dst_path, 'w') as file:
         for clock in clocks:
             if clock['repeat'] == None:
