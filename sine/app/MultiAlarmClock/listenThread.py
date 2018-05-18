@@ -9,21 +9,30 @@ from data import data
 from initUtil import warn
 config = data['config']
 
-lastTime = 30
-remindDelay = None
-on = None
-off = None
+alarmLast = config['alarm_last']
+alarmInterval = config['alarm_interval']
+on = lambda:None
+off = lambda:None
+refresh = lambda:None
 
 def _alarm(stop_event):
     import manager
     from mydatetime import getNow
+    import datetime
     import player
     import time
+    prev = getNow()
+    minGap = datetime.timedelta(0, 300) # 超过300秒，认为是睡眠/待机唤醒，刷新周期重复闹钟
     count = 0
     alarm = False # “闹铃”提醒状态
     while 1:
         if stop_event.is_set():
             break
+        cur = getNow()
+        if (cur - prev >= minGap):
+            manager.refreshWeekly()
+            refresh()
+        prev = cur
         reminds = manager.getReminds() # 获取需要闹铃提醒的闹钟
         length = len(reminds)
         player.play(reminds[0]['sound'] if length else None)
@@ -39,12 +48,12 @@ def _alarm(stop_event):
             _taskbarThread.stop()
             _screenThread.stop()
             off()
-        if alarm and count > 10 * lastTime:
+        if alarm and count > 10 * alarmLast:
             alarm = False
             player.play(None)
             _taskbarThread.stop()
             _screenThread.stop()
-            manager.later(getNow() + remindDelay) # 推迟提醒
+            manager.later(getNow() + alarmInterval) # 推迟提醒
             off()
         count += 1
         time.sleep(0.1)

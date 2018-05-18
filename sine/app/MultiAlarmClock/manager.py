@@ -159,4 +159,10 @@ def resortAndSave():
             file.write('\n')
     return
 
+@synchronized('clocks')
+def refreshWeekly():
+    for clock in data['clocks']:
+        if isinstance(clock, WeeklyClock):
+            clock.refresh()
+
 _init()

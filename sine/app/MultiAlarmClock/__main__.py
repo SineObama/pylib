@@ -49,7 +49,7 @@ def pop():
     return rtn
 
 
-remindDelay = datetime.timedelta(0, data['config']['alarm_interval'])
+alarmInterval = datetime.timedelta(0, data['config']['alarm_interval'])
 fmt = formatter.create(data['config'], data['config']['format'])
 
 # 主页面：闹钟列表
@@ -85,7 +85,7 @@ class MainPage(Page):
         now = getNow()
         try: # catch parse exception
             if len(order) == 0: # 'later' and clean screen
-                manager.later(now + remindDelay)
+                manager.later(now + alarmInterval)
                 return 1
 
             order = order.strip()
@@ -237,7 +237,7 @@ class AlarmPage(Page):
         order = order.strip()
         now = getNow()
         if len(order) == 0: # 'later' and clean screen
-            manager.later(now + remindDelay)
+            manager.later(now + alarmInterval)
             return 1
         # cancel alarm
         if order == 'a':
@@ -250,10 +250,9 @@ class AlarmPage(Page):
         return -1
 
 
-listenThread.remindDelay = remindDelay
-listenThread.lastTime = data['config']['alarm_last']
 listenThread.on = lambda :append(AlarmPage())
 listenThread.off = pop
+listenThread.refresh = lambda :stack[-1].reprint()
 
 
 try:
