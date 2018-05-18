@@ -1,61 +1,40 @@
-
 # coding: utf-8
 
-# In[ ]:
-
-
-# 获取当前路径（用于在不同位置运行时找到当前路径下文件），并添加library根目录到系统路径sys.path
-import sys
-import os
-if len(sys.path[0]) == 0: # develop time using jupyter notebook on current path
-    curPath = os.getcwd()
-else:
-    curPath = sys.path[0]
-print 'current path:', curPath
-root = os.path.dirname(os.path.dirname(os.path.dirname(curPath)))
-sys.path.append(root)
-
-
-# In[ ]:
-
-
 # 外部依赖
+import sys
 import datetime
 # library依赖
 from sine.sync import synchronized
 from sine.helpers import cls
 # 本地依赖
 from parsing import *
-from mydatetime import getNow
-from entity import AlarmClock
-from exception import ClientException
-from data import data, warning
+from mydatetime import *
+from entity import *
+from exception import ClientException, NoStringException
+from data import data
+import initUtil
 import listenThread
 import formatter
 import player
-# 模块初始化
-import manager
-
-
-# In[ ]:
 
 
 # 栈管理“页面”
 # 每个页面有2个函数：
-# do接受指令，返回回调函数编号（大于0）
+# do接受指令
 # reprint输出页面（清屏）
+# 具体实现中，dodo返回回调函数编号（大于0），0则退出页面，-1可表示无操作
 class Page(dict):
-    def __init__(self, do, reprint):
-        self._do = do
-        self._reprint = reprint
-        return
     def do(self, order):
-        rtn = self._do(order)
+        rtn = self.dodo(order)
         if rtn > 0:
             return self[rtn]()
+        if rtn == 0:
+            pop()
         return rtn
     def reprint(self):
-        return self._reprint()
+        pass
+    def dodo(self):
+        return 0
 stack = []
 @synchronized('stack')
 def append(page):
@@ -70,56 +49,59 @@ def pop():
     return rtn
 
 
-# In[ ]:
-
-
-remindDelay = datetime.timedelta(0, data['config']['alarm_interval'])
+alarmInterval = datetime.timedelta(0, data['config']['alarm_interval'])
+fmt = formatter.create(data['config'], data['config']['format'])
 
 # 主页面：闹钟列表
 
-def addMainPage():
+class MainPage(Page):
 
-    fmt = formatter.create(data['config'], data['config']['format'])
+    def __init__(self):
+        self[1] = self.printAndSave
 
     @synchronized('clocks')
-    def clsAndPrintList():
+    def reprint(self):
         cls()
         now = getNow()
         if len(data['clocks']):
+            isToday = True
+            today = datetime.datetime.date(now)
             string = 'alarm clocks:\n'
             for i, clock in enumerate(data['clocks']):
+                if isToday and datetime.datetime.date(clock['time']) > today:
+                    isToday = False
+                    string += '\n'
                 string += fmt(i+1, clock) + '\n'
         else:
             string = 'no clock\n'
         sys.stdout.write(string)
         return
     
-    def printAndSave():
-        clsAndPrintList()
-        manager.save()
+    def printAndSave(self):
+        manager.resortAndSave()
+        self.reprint()
 
-    def main(order):
+    def dodo(self, order):
         now = getNow()
         try: # catch parse exception
             if len(order) == 0: # 'later' and clean screen
-                manager.later(now + remindDelay)
+                manager.later(now + alarmInterval)
                 return 1
 
             order = order.strip()
             if order == 'q': # quit
-                pop()
                 return 0
 
             # edit clock in new page
             if order.startswith('e'):
                 index, unused = parseInt(order[1:], 0)
-                addEditPage(manager.get(index, True))
+                append(EditPage(manager.get(index, True)))
                 return -1
             # edit time
             if order.startswith('w'):
                 index, remain = parseInt(order[1:])
                 target, unused = parseDateTime(remain, now)
-                manager.editTime(manager.get(index), target)
+                manager.get(index).editTime(target)
                 return 1
             # cancel alarm
             if order.startswith('a'):
@@ -137,75 +119,83 @@ def addMainPage():
                 manager.remove(indexs)
                 return 1
             
-            # $dtime ($msg)        #普通闹钟
+            # $dtime ($msg)        #一次性闹钟
             # $dtime w $wday ($msg)        #星期重复闹钟
             # $dtime r $dtime ($msg)        #周期重复闹钟
             target, remain = parseDateTime(order, now)
             try:
+                char = ''
                 char, remain2 = parseString(remain)
-                if char == 'w':
-                    weekdays, msg = parseString(remain2)
-                    manager.addRepeatWeekday(target, weekdays, msg)
-                    return 1
-                if char == 'r':
-                    period, msg = parseTime(remain2, zero)
-                    manager.addRepeatPeriod(target, period - zero, msg)
-                    return 1
-            except Exception, e:
+            except NoStringException, e:
                 pass
-            manager.addOnce(target, remain)
+            if char == 'w':
+                weekdays, msg = parseString(remain2)
+                manager.add(WeeklyClock({'time':target,'weekdays':weekdays,'msg':msg}))
+                return 1
+            if char == 'r':
+                period, msg = parseDateAndTime(remain2, zero)
+                period -= zero
+                manager.add(PeriodClock({'time':target,'period':period,'msg':msg}))
+                return 1
+            if target <= now:
+                target = getNextFromWeekday(now, target, everyday)
+            manager.add(OnceClock({'time':target,'msg':remain}))
             return 1
         except ClientException as e:
             print e
             return -1
-    
-    page = Page(main, clsAndPrintList)
-    page[1] = printAndSave
-    append(page)
 
 # 编辑页面
 
-def addEditPage(clock):
+class EditPage(Page):
+
+    def __init__(self, clock):
+        self.clock = clock
+        self[1] = self.printAndSave
     
-    def clsAndPrintClock():
+    def reprint(self):
         cls()
+        clock = self.clock
         string = ' - Edit - \n'
         string += '%3s\n' % ('ON' if clock['on'] else 'OFF')
         string += 'next time: %s\n' % str(clock['time'])
         string += 'remind ahead: %s\n' % str(clock['remindAhead'])
         string += 'repeat: '
-        if clock['repeat'] == None:
+        if isinstance(clock, OnceClock):
             string += 'No'
         else:
-            if type(clock['repeat']) == str:
-                string += 'on weekday \'' + clock['repeat'] + '\''
+            if isinstance(clock, WeeklyClock):
+                string += 'on weekday \'' + clock['weekdays'] + '\''
             else:
-                string += 'every ' + (zero + clock['repeat']).strftime('%H:%M:%S')
+                string += 'every ' + (zero + clock['period']).strftime('%H:%M:%S')
         string += '\n'
         string += 'message: %s\n' % clock['msg']
         string += 'sound: %s\n' % clock['sound']
         sys.stdout.write(string)
         return
     
-    def printAndSave():
-        clsAndPrintClock()
-        manager.save()
+    def printAndSave(self):
+        manager.resortAndSave()
+        self.reprint()
     
-    def editPage(order):
+    def dodo(self, order):
+        clock = self.clock
         try: # catch parse exception
             order = order.strip()
             if order == 'q': # quit
-                pop()
                 return 0
 
             # edit time
             if order.startswith('w'):
                 target, unused = parseDateTime(order[1:], getNow())
-                manager.editTime(clock, target)
+                clock.editTime(target)
                 return 1
             # edit remind ahead
             if order.startswith('a'):
-                manager.editRemindAhead(clock, parseInt(order[1:])[0])
+                ahead = parseInt(order[1:])[0]
+                if ahead < 0:
+                    raise ClientException('can\'t ahead negative')
+                clock.editRemindAhead(ahead)
                 return 1
             # edit message
             if order.startswith('m'):
@@ -213,13 +203,15 @@ def addEditPage(clock):
                 return 1
             # edit repeat time
             if order.startswith('r'):
-                if not clock['repeat']:
-                    raise ClientException('this is not repeat clock')
-                if type(clock['repeat']) == str:
-                    manager.editWeekdays(clock, parseString(order[1:])[0])
+                if isinstance(clock, OnceClock):
+                    raise ClientException('this is once clock')
+                if isinstance(clock, WeeklyClock):
+                    clock.editWeekdays(parseString(order[1:])[0])
+                    clock.resetTime(getNextFromWeekday(getNow(), clock['time'], clock['weekdays']))
                 else:
-                    period, unused = parseTime(order[1:], zero)
-                    manager.editPeriod(clock, period - zero)
+                    period, unused = parseDateAndTime(order[1:], zero)
+                    clock.editPeriod(period - zero)
+                    clock.resetTime(getNow() + clock['period'])
                 return 1
             # edit sound
             if order.startswith('s'):
@@ -233,20 +225,19 @@ def addEditPage(clock):
         except ClientException as e:
             print e
             return -1
-    
-    page = Page(editPage, clsAndPrintClock)
-    page[1] = printAndSave
-    append(page)
 
 # 响铃页面
 
-def addAlarmPage():
+class AlarmPage(Page):
 
-    def alarmPage(order):
+    def __init__(self):
+        self[1] = manager.resortAndSave
+
+    def dodo(self, order):
         order = order.strip()
         now = getNow()
         if len(order) == 0: # 'later' and clean screen
-            manager.later(now + remindDelay)
+            manager.later(now + alarmInterval)
             return 1
         # cancel alarm
         if order == 'a':
@@ -257,30 +248,19 @@ def addAlarmPage():
             manager.switch([])
             return 1
         return -1
-    
-    page = Page(alarmPage, lambda :None)
-    page[1] = manager.save
-    append(page)
 
 
-# In[ ]:
-
-
-listenThread.remindDelay = remindDelay
-listenThread.lastTime = data['config']['alarm_last']
-listenThread.on = addAlarmPage
+listenThread.on = lambda :append(AlarmPage())
 listenThread.off = pop
+listenThread.refresh = lambda :stack[-1].reprint()
 
 
-# In[ ]:
-
-
-# main loop
 try:
-    if warning and data['config']['warning_pause']:
-        print '\npress enter to continue'
-        raw_input()
-    addMainPage()
+    # 模块初始化
+    import manager
+    if data['config']['warning_pause']:
+        initUtil.warning_pause()
+    append(MainPage())
     listenThread.start()
     while (1):
         order = raw_input()
@@ -290,4 +270,3 @@ try:
 finally:
     player.play(None)
     listenThread.stop()
-

@@ -39,7 +39,7 @@ class ReStartableThread(object):
 
     def start(self):
         '''若线程存活或已停止，停止并重新初始化。'''
-        if self._thread.is_alive() or self._thread.stopped():
+        if self._thread.is_alive() or not self._thread.stopped():
             self.stop()
         self._thread.start()
         return

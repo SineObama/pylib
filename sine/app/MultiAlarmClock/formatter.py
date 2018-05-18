@@ -3,8 +3,6 @@
 根据配置的格式，创建格式化对象，格式化输出的闹钟列表。
 '''
 
-from parsing import zero
-
 class Str(object):
     import re as _re
     def __init__(self, s=''):
@@ -23,17 +21,10 @@ def create(config, format):
     on = config['state.ON']
     off = config['state.OFF']
     def formatter(i, clock):
-        def rep():
-            if clock['repeat'] == None:
-                return ''
-            if type(clock['repeat']) == str:
-                return clock['repeat']
-            else:
-                return (zero + clock['repeat']).strftime('%H:%M:%S')
         s = Str(clock['time'].strftime(format))
         s.fill('warn', 's', warn if clock.isExpired() else '')
         s.fill('idx', 'd', i)
         s.fill('state', 's', on if clock['on'] else off)
         s.fill('msg', 's', clock['msg'])
-        return s.fill('rep', 's', rep)
+        return s.fill('rep', 's', clock.repeatStr)
     return formatter

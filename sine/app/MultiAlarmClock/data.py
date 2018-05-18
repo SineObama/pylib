@@ -1,38 +1,44 @@
 # coding=utf-8
 '''
-全局数据。包括初始化。
+全局数据。包括配置的读取和验证。
 '''
+
+import os.path as spath
+import shutil
 
 data = {}
 
 # 加载配置并检查。对于缺少的配置赋予默认值并暂停警告
-warning = False # 显示警告，等待回车继续（清屏）
-
-def warn(*args):
-    global warning
-    s = ''
-    if len(args) > 0:
-        s = args[0]
-        for i in args[1:]:
-            s += ' ' + str(i)
-    print s
-    warning = True
 
 def _init():
+    def boolConverter(s):
+        '''对空或者0开头的字符串视为False，其余视为True'''
+        if s == '' or s.startswith('0'):
+            return False
+        return True
+
     import sine.propertiesReader as reader
+    from sine.path import Path
+    from initUtil import warn
+
+    location = Path(__file__).join('..')
+    data['location'] = location
 
     # 从文件读入全局配置，暂时保存为字符串
-    _conf_filename = 'clock.conf'
+    conf_filename = 'clock.conf'
+    allMiss = False
+    config = {}
     try:
-        config = {}
-        config = reader.readAsDict(_conf_filename)
+        useDefault(location, conf_filename)
+        config = reader.readAsDict(location.join(conf_filename))
     except Exception, e:
-        warn('load config from file', _conf_filename, 'failed:' + repr(e))
+        warn('load config from file', conf_filename, 'failed, will use default value.', e)
+        allMiss = True
 
     # 为缺失值填充默认配置(键, 默认值, 转换器)
     default_config = [
-    ('warning_pause', True, bool),
-    ('taskbar_flash', True, bool),
+    ('warning_pause', True, boolConverter),
+    ('taskbar_flash', True, boolConverter),
     ('screen_flash_mode', '0111101111', None),
     ('alarm_last', 30, int),
     ('alarm_interval', 300, int),
@@ -43,36 +49,34 @@ def _init():
     ('warn', '!!!', None),
     ('state.ON', 'ON', None),
     ('state.OFF', 'OFF', None),
-    ('datafile', 'clocks.binv3', None)]
+    ('datafile', 'clocks.txt', None)]
 
-    for (key, default, converter) in default_config:
-        if not config.has_key(key):
-            warn('missing config \'' + key + '\', will use default value \'' + str(default) + '\'')
+    if allMiss:
+        for (key, default, converter) in default_config:
             config[key] = default
-        elif converter:
-            try:
-                config[key] = converter(config[key])
-            except Exception, e:
-                warn('parsing config \'' + key + '=' + str(config[key]) + '\' failed, will use default value \'' + str(default) + '\'. ' + repr(e))
-
-    import player
-    from exception import ClientException
-    try:
-        player.assertLegal(config['default_sound'])
-    except ClientException, e:
-        warn('default sound illeagal, will use default.', e)
-        config['default_sound'] = 'default'
+    else:
+        for (key, default, converter) in default_config:
+            if not config.has_key(key):
+                warn('missing config \'' + key + '\', will use default value \'' + str(default) + '\'.')
+                config[key] = default
+            elif converter:
+                try:
+                    config[key] = converter(config[key])
+                except Exception, e:
+                    warn('parsing config \'' + key + '=' + str(config[key]) + '\' failed, will use default value \'' + str(default) + '\'.', e)
+                    config[key] = default
 
     data['config'] = config
 
     # 读入日期和时间格式配置
-    _format_filename = 'time.conf'
+    format_filename = 'time.conf'
     try:
-        config = reader.readAsList(_format_filename)
+        useDefault(location, format_filename)
+        config = reader.readAsList(location.join(format_filename))
         for i, (k, v) in enumerate(config):
             config[i] = (k, v.split(','))
     except Exception, e:
-        warn('load time format from file', _format_filename, 'failed, will use default value.', repr(e))
+        warn('load time format from file', format_filename, 'failed, will use default value.', e)
         config = [(   '%M'   ,        ['minute', 'second', 'microsecond']),
                   ('%H:'     ,['hour', 'minute', 'second', 'microsecond']),
                   (     ':%S',                  ['second', 'microsecond']),
@@ -81,16 +85,26 @@ def _init():
                   ('%H:%M:%S',['hour', 'minute', 'second', 'microsecond'])]
     data['timeFormats'] = config
 
-    _format_filename = 'date.conf'
+    format_filename = 'date.conf'
     try:
-        config = reader.readAsList(_format_filename)
+        useDefault(location, format_filename)
+        config = reader.readAsList(location.join(format_filename))
         for i, (k, v) in enumerate(config):
             config[i] = (k, v.split(','))
     except Exception, e:
-        warn('load date format from file', _format_filename, 'failed, will use default value.', repr(e))
+        warn('load date format from file', format_filename, 'failed, will use default value.', e)
         config = [(     '/%d',                 ['day']),
                   (   '%m/%d',        ['month', 'day']),
                   ('%y/%m/%d',['year', 'month', 'day'])]
     data['dateFormats'] = config
+
+def useDefault(location, filename):
+    '''配置文件不存在时尝试从默认文件复制一份'''
+    suffix = '.default'
+    filepath = location.join(filename)
+    if not spath.isfile(filepath):
+        defaultpath = location.join(filename + suffix)
+        if spath.isfile(defaultpath):
+            shutil.copyfile(defaultpath, filepath)
 
 _init()

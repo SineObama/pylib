@@ -15,9 +15,9 @@ def refreshWindow():
 	hWnd = win32gui.FindWindow(0,s)
 	return
 
-def FlashWindow():
+def flash():
 	'''任务栏闪烁'''
-	win32gui.FlashWindow(hWnd, 1)
+	win32gui.FlashWindowEx(hWnd, 0, 1, 1000)
 	return
 
 refreshWindow()
