@@ -31,6 +31,7 @@ def _alarm(stop_event):
         cur = getNow()
         if (cur - prev >= minGap):
             manager.refreshWeekly()
+            manager.resortAndSave()
             refresh()
         prev = cur
         reminds = manager.getReminds() # 获取需要闹铃提醒的闹钟
