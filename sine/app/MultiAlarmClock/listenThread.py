@@ -7,22 +7,22 @@
 
 from data import data
 from initUtil import warn
+import datetime
 config = data['config']
 
 alarmLast = config['alarm_last']
-alarmInterval = config['alarm_interval']
+alarmInterval = datetime.timedelta(0, config['alarm_interval'])
 on = lambda:None
 off = lambda:None
-refresh = lambda:None
+refresh = lambda:None # 刷新周期重复闹钟
 
 def _alarm(stop_event):
     import manager
     from mydatetime import getNow
-    import datetime
     import player
     import time
     prev = getNow()
-    minGap = datetime.timedelta(0, 300) # 超过300秒，认为是睡眠/待机唤醒，刷新周期重复闹钟
+    minGap = datetime.timedelta(0, 300) # 超过300秒，认为是睡眠/待机唤醒
     count = 0
     alarm = False # “闹铃”提醒状态
     while 1:
