@@ -2,16 +2,25 @@
 '''自定义线程对象，方便停止线程和重复启动。'''
 
 import threading as _threading
+import inspect as _inspect
 
 class StoppableThread(_threading.Thread):
-    """Thread class with a stop() method. 
-    The thread process itself has to take a parameter of type threading.Event (default name is 'stop_event', can be specified), 
-    and check regularly by stop_event.is_set() to stop itself.
-    The event object will be added to @parameter kwargs."""
+    """Thread like threading.Thread with a stop() method.
+    A threading.Event will be a attribute and passed to the target function via @parameter kwargs, with default name 'stop_event'.
+    The thread itself has to check the event regularly by i.e. stop_event.is_set()."""
 
     def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None, event_name='stop_event'):
         '''keep the same as threading.Thread.__init__'''
+        if target != None:
+            spec = _inspect.getargspec(target)
+            if spec.keywords == None:
+                for i in spec.args:
+                    if i == event_name:
+                        break
+                else:
+                    raise ValueError('target function has neight **kwargs or argument \'' + event_name + '\'')
         self._stop_event = _threading.Event()
+        self.__setattr__(event_name, self._stop_event)
         if kwargs == None:
             kwargs = {}
         kwargs[event_name] = self._stop_event
@@ -38,7 +47,7 @@ class ReStartableThread(object):
         return
 
     def start(self):
-        '''若线程存活或已停止，停止并重新初始化。'''
+        '''若线程存活或未设置停止（未更新线程对象），停止并重新初始化。'''
         if self._thread.is_alive() or not self._thread.stopped():
             self.stop()
         self._thread.start()
