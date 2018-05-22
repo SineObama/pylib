@@ -30,7 +30,7 @@ def _init():
     config = {}
     try:
         useDefault(location, conf_filename)
-        config = reader.readAsDict(location.join(conf_filename))
+        config = reader.readAsDict(conf_filename)
     except Exception, e:
         warn('load config from file', conf_filename, 'failed, will use default value.', e)
         allMiss = True
@@ -72,7 +72,7 @@ def _init():
     format_filename = 'time.conf'
     try:
         useDefault(location, format_filename)
-        config = reader.readAsList(location.join(format_filename))
+        config = reader.readAsList(format_filename)
         for i, (k, v) in enumerate(config):
             config[i] = (k, v.split(','))
     except Exception, e:
@@ -88,7 +88,7 @@ def _init():
     format_filename = 'date.conf'
     try:
         useDefault(location, format_filename)
-        config = reader.readAsList(location.join(format_filename))
+        config = reader.readAsList(format_filename)
         for i, (k, v) in enumerate(config):
             config[i] = (k, v.split(','))
     except Exception, e:
@@ -101,7 +101,7 @@ def _init():
 def useDefault(location, filename):
     '''配置文件不存在时尝试从默认文件复制一份'''
     suffix = '.default'
-    filepath = location.join(filename)
+    filepath = filename
     if not spath.isfile(filepath):
         defaultpath = location.join(filename + suffix)
         if spath.isfile(defaultpath):

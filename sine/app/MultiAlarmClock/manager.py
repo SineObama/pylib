@@ -7,7 +7,7 @@ from exception import ClockException
 from entity import *
 from data import data
 
-_data_filepath = data['location'].join(data['config']['datafile'])
+_data_filepath = data['config']['datafile']
 _sort = lambda x:(x['time'] if x['on'] else datetime.datetime.max)
 _clock_lock = threading.RLock()
 
