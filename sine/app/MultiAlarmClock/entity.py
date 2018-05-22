@@ -1,7 +1,6 @@
 # coding=utf-8
 
 import datetime
-from sine.sync import synchronized
 import mydatetime
 from mydatetime import getNow, getNextFromWeekday, everyday
 from parsing import zero

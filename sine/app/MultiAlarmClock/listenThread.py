@@ -93,8 +93,8 @@ finally:
 tokens = config['screen_flash_mode']
 
 def _screen(stop_event):
+    import os
     import manager
-    from sine.helpers import cls
     import time
     import formatter
     fmt = formatter.create(config, config['flash_format'])
@@ -110,7 +110,7 @@ def _screen(stop_event):
         if last != tokens[pos]:
             last = tokens[pos]
             if last == '0':
-                cls()
+                os.system('cls')
             elif last == '1':
                 reminds = manager.getReminds() # 获取需要闹铃提醒的闹钟
                 string = ''

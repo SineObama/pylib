@@ -3,9 +3,10 @@
 # 外部依赖
 import sys
 import datetime
+import os
+import threading
 # library依赖
-from sine.sync import synchronized
-from sine.helpers import cls
+from plone.synchronize import synchronized
 # 本地依赖
 from parsing import *
 from mydatetime import *
@@ -36,18 +37,23 @@ class Page(dict):
     def dodo(self):
         return 0
 stack = []
-@synchronized('stack')
+stack_lock = threading.RLock()
+@synchronized(stack_lock)
 def append(page):
     stack.append(page)
     page.reprint()
     return
-@synchronized('stack')
+@synchronized(stack_lock)
 def pop():
     rtn = stack.pop()
     if len(stack):
         stack[-1].reprint()
     return rtn
 
+
+def cls():
+    os.system('cls')
+    return
 
 alarmInterval = datetime.timedelta(0, data['config']['alarm_interval'])
 fmt = formatter.create(data['config'], data['config']['format'])
@@ -59,7 +65,6 @@ class MainPage(Page):
     def __init__(self):
         self[1] = self.printAndSave
 
-    @synchronized('clocks')
     def reprint(self):
         cls()
         now = getNow()

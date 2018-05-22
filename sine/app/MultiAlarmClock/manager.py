@@ -1,15 +1,17 @@
 # coding=utf-8
 
+import threading
+from plone.synchronize import synchronized
 from mydatetime import *
-from sine.sync import synchronized
 from exception import ClockException
 from entity import *
 from data import data
 
 _data_filepath = data['location'].join(data['config']['datafile'])
 _sort = lambda x:(x['time'] if x['on'] else datetime.datetime.max)
+_clock_lock = threading.RLock()
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def _init():
     import os
     # 读取数据文件，忽略文件不存在的情况
@@ -43,13 +45,13 @@ def getReminds():
             reminds.append(clock)
     return reminds
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def add(clock):
     '''新的添加函数'''
     data['clocks'].append(clock)
     return
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def get(index, defaultFirst=False):
     '''参数从1开始（数组从0开始），检查越界（允许0代表默认操作，defaultFirst返回第一个闹钟否则None）'''
     if index > len(data['clocks']) or index < 0:
@@ -62,7 +64,7 @@ def get(index, defaultFirst=False):
         raise ClockException('no clock!!!')
     return data['clocks'][0]
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def cancel(clock):
     '''取消闹钟
     传入None为默认操作：关掉第一个提醒或到期闹钟
@@ -87,7 +89,7 @@ def cancel(clock):
         data['clocks'].remove(clock)
     return
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def switch(indexs):
     '''变换开关。
     传入空列表执行默认操作：改变第一个提醒或到期闹钟，或者第一个闹钟。
@@ -126,7 +128,7 @@ def _getFirstRemindOrExpired(clocks, now):
             return clock
     return None
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def remove(indexs):
     clocks = []
     for i, clock in enumerate(data['clocks']):
@@ -135,7 +137,7 @@ def remove(indexs):
     data['clocks'] = clocks
     return
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def later(time):
     '''存在提醒闹钟：设置他们的提醒时间；
     不存在：设置所有到期闹钟的提醒时间'''
@@ -150,7 +152,7 @@ def later(time):
                 clock['remindTime'] = time
     return
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def resortAndSave():
     data['clocks'].sort(key=_sort)
     with open(_data_filepath, 'w') as file:
@@ -159,7 +161,7 @@ def resortAndSave():
             file.write('\n')
     return
 
-@synchronized('clocks')
+@synchronized(_clock_lock)
 def refreshWeekly():
     for clock in data['clocks']:
         if isinstance(clock, WeeklyClock):
